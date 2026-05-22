@@ -120,7 +120,7 @@ function App() {
         <header className="no-print rounded-lg border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
-              <p className="text-sm font-semibold uppercase tracking-wide text-teal-700">Private workbook report</p>
+              <p className="text-sm font-semibold uppercase tracking-wide text-teal-700">Wells Fargo Advisors</p>
               <h1 className="mt-2 text-3xl font-semibold tracking-normal text-slate-950 sm:text-4xl">Income Ladder Snapshot</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 sm:text-base">
                 Turn a private income ladder workbook into a clean client-ready PDF.
@@ -380,7 +380,7 @@ function CompactPrintReport({
   return (
     <section className="print-only compact-print-report">
       <header className="compact-print-header print-block">
-        <p>Income Ladder Snapshot</p>
+        <p>Wells Fargo Advisors</p>
         <h1>Income Ladder Snapshot</h1>
         <dl>
           <div>
