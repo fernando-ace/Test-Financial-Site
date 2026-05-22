@@ -33,8 +33,8 @@ if (!cssMatch || !jsMatch) {
   throw new Error("Could not find built CSS and JS asset references in dist/index.html.");
 }
 
-const cssAsset = `/Test-Financial-Site/assets/${basename(cssMatch[1])}`;
-const jsAsset = `/Test-Financial-Site/assets/${basename(jsMatch[1])}`;
+const cssAsset = `/Client-Financial-Snapshot/assets/${basename(cssMatch[1])}`;
+const jsAsset = `/Client-Financial-Snapshot/assets/${basename(jsMatch[1])}`;
 
 const rootHtml = readFileSync(rootIndexPath, "utf8")
   .replace(/stylesheet\.href = ".*?";/, `stylesheet.href = "${cssAsset}";`)

@@ -43,13 +43,13 @@ The production build is written to `dist/` and is fully static.
 This repo is configured for a GitHub Project Page:
 
 ```text
-https://fernando-ace.github.io/Test-Financial-Site/
+https://fernando-ace.github.io/Client-Financial-Snapshot/
 ```
 
 `vite.config.ts` keeps the required project base path:
 
 ```ts
-base: "/Test-Financial-Site/"
+base: "/Client-Financial-Snapshot/"
 ```
 
 In GitHub Pages settings, use:
