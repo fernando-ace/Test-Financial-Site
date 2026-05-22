@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { EditableBudgetRow, createRow } from "./budgetModel";
 
 export type BudgetRowType = "income" | "expense" | "balance";
 
@@ -104,6 +105,21 @@ export async function parseBudgetWorkbook(workbookUrl: string): Promise<BudgetWo
       plannedVsActualDifference,
     },
   };
+}
+
+export function convertWorkbookRowsToEditableRows(rows: BudgetRow[]): EditableBudgetRow[] {
+  return rows
+    .filter((row) => !row.isSubtotal && row.type !== "balance")
+    .map((row) =>
+      createRow({
+        id: row.id,
+        type: row.type === "income" ? "income" : "expense",
+        category: row.section,
+        name: row.name,
+        planned: row.planned,
+        actual: row.actual,
+      }),
+    );
 }
 
 function extractBudgetRows(sheetRows: SheetRow[]): BudgetRow[] {
