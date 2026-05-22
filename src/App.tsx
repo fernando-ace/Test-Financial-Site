@@ -114,6 +114,31 @@ function App() {
     setMetadata((current) => ({ ...current, [field]: value }));
   }
 
+  function clearCurrentReport() {
+    const confirmed = window.confirm(
+      "Clear the current report? This removes the workbook data from the page, but does not affect the original Excel file.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setRows([]);
+    setWorkbookData(null);
+    setMetadata({
+      clientName: "",
+      preparedBy: "",
+      reportDate: getTodayInputValue(),
+    });
+    setShowAllCategories(false);
+    setError(null);
+    setStatusMessage("Current report cleared. Upload an Excel file or load the sample report.");
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-4 text-slate-900 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full min-w-0 max-w-7xl flex-col gap-4">
@@ -136,7 +161,16 @@ function App() {
             <div className="grid gap-2 sm:grid-cols-3 lg:w-auto">
               <ActionButton icon={Upload} label="Upload Excel" onClick={() => fileInputRef.current?.click()} />
               <ActionButton icon={RefreshCcw} label="Load sample" onClick={() => void loadSampleWorkbook()} />
-              <ActionButton icon={Printer} label="Generate Client PDF" onClick={() => window.print()} primary />
+              <ActionButton
+                icon={Printer}
+                label="Generate Client PDF"
+                onClick={() => {
+                  if (rows.length > 0) {
+                    window.print();
+                  }
+                }}
+                primary
+              />
               <input
                 ref={fileInputRef}
                 type="file"
@@ -154,8 +188,17 @@ function App() {
             <ReportField label="Report date" type="date" value={metadata.reportDate} onChange={(value) => updateMetadata("reportDate", value)} />
           </div>
 
-          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600" role="status">
-            {statusMessage}
+          <div className="mt-3 flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+            <p role="status">{statusMessage}</p>
+            {rows.length > 0 ? (
+              <button
+                type="button"
+                onClick={clearCurrentReport}
+                className="inline-flex items-center justify-center rounded-md border border-rose-200 bg-white px-3 py-1.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2"
+              >
+                Clear current report
+              </button>
+            ) : null}
           </div>
         </header>
 
@@ -180,6 +223,15 @@ function App() {
 
         {isLoading ? <LoadingState /> : null}
         {error ? <ErrorState message={error} /> : null}
+
+        {!isLoading && !error && rows.length === 0 ? (
+          <section className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center shadow-sm">
+            <h2 className="text-xl font-semibold text-slate-950">No workbook loaded</h2>
+            <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">
+              Upload an Excel file to create a client snapshot, or load the sample report to preview the dashboard.
+            </p>
+          </section>
+        ) : null}
 
         {!isLoading && rows.length > 0 ? (
           <section className="printable-report flex min-w-0 flex-col gap-4">
