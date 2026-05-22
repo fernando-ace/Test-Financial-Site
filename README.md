@@ -1,16 +1,17 @@
-# Client Financial Snapshot
+# Income Ladder Snapshot
 
-An internal advisor proof of concept for turning Excel planning workbooks into clean client-ready summaries, screenshots, and PDFs. Excel remains the source of truth; the app visualizes workbook data in the browser without requiring private advisor files to be committed to the repo.
+A static advisor tool for turning a private Income Ladder workbook into a concise client-ready PDF. Excel remains the source of truth; the app only reads an uploaded workbook in the browser and renders a clean web preview plus a compact print report.
 
-No backend, database, authentication, serverless functions, or paid services are used.
+No backend, database, authentication, serverless functions, analytics, or paid services are used.
 
 ## What the App Does
 
-- Loads the included MoneySense workbook as sample demo data.
-- Lets an advisor upload a local `.xlsx` or `.xls` workbook for in-browser parsing.
-- Converts workbook line items into KPI cards, charts, source rows, and report insights.
+- Lets an advisor upload a local `.xlsx`, `.xls`, or `.xlsm` Income Ladder workbook.
+- Parses displayed workbook values locally in browser memory.
+- Summarizes annual cash flow, shortfall timing, distributions, withdrawals, and upcoming maturities.
 - Adds report metadata fields for client name, prepared by, and report date.
 - Generates a client PDF through the browser print flow.
+- Clears all visible report data from React state when the advisor clears the report.
 
 ## Tech Stack
 
@@ -72,6 +73,8 @@ The old `gh-pages` branch deploy command is still available as `npm run deploy:g
 
 ## Privacy
 
-The sample workbook in `public/` is demo data. Real advisor workbooks do not need to be committed to `/public` or bundled with the app.
+The app is fully static and local-only. Uploaded workbooks are parsed locally in the browser and are not uploaded to a backend.
 
-Uploaded Excel files are parsed locally in the browser for this proof of concept. Financial workbook data is not sent to a server by the app.
+Workbook contents are kept in React memory state only. The app does not persist uploaded workbook data to localStorage, sessionStorage, IndexedDB, cookies, URL params, backend APIs, analytics, or external services.
+
+Real advisor or client workbooks should never be committed to this repo or placed in `/public`. The local advisor workbook used during development is not part of the public app.

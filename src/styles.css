@@ -166,7 +166,7 @@ textarea {
 
   .compact-print-header dl {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.45fr) minmax(0, 0.7fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 0.65fr);
     gap: 0.08in;
     margin: 0.1in 0 0;
   }
@@ -187,7 +187,7 @@ textarea {
 
   .compact-print-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 0.1in;
     margin-bottom: 0.12in;
   }
@@ -213,7 +213,7 @@ textarea {
   .compact-print-grid strong {
     color: #020617;
     display: block;
-    font-size: 14pt;
+    font-size: 12pt;
     line-height: 1.15;
     margin-top: 0.03in;
   }
@@ -312,5 +312,10 @@ textarea {
   .compact-print-notes p {
     margin: 0;
     white-space: pre-wrap;
+  }
+
+  .compact-empty {
+    color: #64748b;
+    margin: 0;
   }
 }
