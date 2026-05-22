@@ -501,32 +501,46 @@ function CompactPrintKpi({ label, value }: { label: string; value: string }) {
 
 function CompactPrintBarChart({ data }: { data: Array<{ name: string; Planned: number; Actual: number }> }) {
   const maxValue = Math.max(...data.flatMap((item) => [item.Planned, item.Actual]), 1);
+  const rowHeight = 28;
+  const chartWidth = 610;
+  const labelWidth = 105;
+  const valueWidth = 72;
+  const plotWidth = chartWidth - labelWidth - valueWidth - 18;
+  const chartHeight = 34 + data.length * rowHeight;
 
   return (
-    <div className="compact-print-chart" aria-label="Planned vs Actual by category">
-      <div className="compact-print-chart-legend">
-        <span>
-          <i className="planned" /> Planned
-        </span>
-        <span>
-          <i className="actual" /> Actual
-        </span>
-      </div>
-      {data.map((item) => (
-        <div className="compact-print-bar-row" key={item.name}>
-          <div className="compact-print-bar-label">{shortenPrintLabel(item.name)}</div>
-          <div className="compact-print-bar-stack">
-            <div className="compact-print-bar-track">
-              <span className="compact-print-bar planned" style={{ width: `${Math.max((item.Planned / maxValue) * 100, 2)}%` }} />
-            </div>
-            <div className="compact-print-bar-track">
-              <span className="compact-print-bar actual" style={{ width: `${Math.max((item.Actual / maxValue) * 100, 2)}%` }} />
-            </div>
-          </div>
-          <div className="compact-print-bar-value">{formatCurrency(item.Actual)}</div>
-        </div>
-      ))}
-    </div>
+    <svg className="compact-print-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label="Planned vs Actual by category">
+      <text x={chartWidth - 160} y="12" fill="#475569" fontSize="10" fontWeight="700">
+        PLANNED
+      </text>
+      <rect x={chartWidth - 205} y="4" width="14" height="7" rx="3.5" fill="#0f766e" />
+      <text x={chartWidth - 72} y="12" fill="#475569" fontSize="10" fontWeight="700">
+        ACTUAL
+      </text>
+      <rect x={chartWidth - 113} y="4" width="14" height="7" rx="3.5" fill="#2563eb" />
+
+      {data.map((item, index) => {
+        const y = 28 + index * rowHeight;
+        const plannedWidth = Math.max((item.Planned / maxValue) * plotWidth, 4);
+        const actualWidth = Math.max((item.Actual / maxValue) * plotWidth, 4);
+
+        return (
+          <g key={item.name}>
+            {index > 0 ? <line x1="0" x2={chartWidth} y1={y - 8} y2={y - 8} stroke="#e2e8f0" strokeWidth="1" /> : null}
+            <text x="0" y={y + 7} fill="#334155" fontSize="11" fontWeight="700">
+              {shortenPrintLabel(item.name)}
+            </text>
+            <rect x={labelWidth} y={y - 1} width={plotWidth} height="7" rx="3.5" fill="#e2e8f0" />
+            <rect x={labelWidth} y={y - 1} width={plannedWidth} height="7" rx="3.5" fill="#0f766e" />
+            <rect x={labelWidth} y={y + 11} width={plotWidth} height="7" rx="3.5" fill="#e2e8f0" />
+            <rect x={labelWidth} y={y + 11} width={actualWidth} height="7" rx="3.5" fill="#2563eb" />
+            <text x={chartWidth} y={y + 7} fill="#020617" fontSize="11" fontWeight="800" textAnchor="end">
+              {formatCurrency(item.Actual)}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 
