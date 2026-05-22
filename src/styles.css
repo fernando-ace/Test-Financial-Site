@@ -166,7 +166,7 @@ textarea {
 
   .compact-print-header dl {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.45fr) minmax(0, 0.7fr);
     gap: 0.08in;
     margin: 0.1in 0 0;
   }

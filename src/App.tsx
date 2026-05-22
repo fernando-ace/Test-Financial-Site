@@ -303,22 +303,15 @@ function App() {
                 <InsightCard insights={insights} hasActualExpenses={reportBasis.hasActualExpenses} />
               </section>
 
-              {advisorNotes.trim() ? (
-                <section className="advisor-notes rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h2 className="text-lg font-semibold text-slate-950">Advisor notes</h2>
-                  <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{advisorNotes}</p>
-                </section>
-              ) : (
-                <section className="advisor-notes advisor-notes-empty rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h2 className="text-lg font-semibold text-slate-950">Advisor notes</h2>
-                  <textarea
-                    value={advisorNotes}
-                    onChange={(event) => setAdvisorNotes(event.target.value)}
-                    placeholder="Add optional notes for the client report..."
-                    className="mt-3 min-h-24 w-full rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                  />
-                </section>
-              )}
+              <section className="advisor-notes rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h2 className="text-lg font-semibold text-slate-950">Advisor notes</h2>
+                <textarea
+                  value={advisorNotes}
+                  onChange={(event) => setAdvisorNotes(event.target.value)}
+                  placeholder="Add optional notes for the client report..."
+                  className="mt-3 min-h-24 w-full rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                />
+              </section>
             </section>
           ) : null}
 
@@ -397,8 +390,7 @@ function CompactPrintReport({
           <div>
             <dt>Workbook</dt>
             <dd>
-              {workbookData?.workbookName ?? "Workbook"}
-              {workbookData?.sheetName ? `, ${workbookData.sheetName}` : ""}
+              {formatPrintWorkbookLabel(workbookData)}
             </dd>
           </div>
           <div>
@@ -510,14 +502,14 @@ function CompactPrintBarChart({ data }: { data: Array<{ name: string; Planned: n
 
   return (
     <svg className="compact-print-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label="Planned vs Actual by category">
-      <text x={chartWidth - 160} y="12" fill="#475569" fontSize="10" fontWeight="700">
+      <text x={chartWidth - 205} y="14" fill="#475569" fontSize="11" fontWeight="800">
         PLANNED
       </text>
-      <rect x={chartWidth - 205} y="4" width="14" height="7" rx="3.5" fill="#0f766e" />
-      <text x={chartWidth - 72} y="12" fill="#475569" fontSize="10" fontWeight="700">
+      <rect x={chartWidth - 228} y="5" width="16" height="8" rx="4" fill="#0f766e" />
+      <text x={chartWidth - 70} y="14" fill="#475569" fontSize="11" fontWeight="800">
         ACTUAL
       </text>
-      <rect x={chartWidth - 113} y="4" width="14" height="7" rx="3.5" fill="#2563eb" />
+      <rect x={chartWidth - 94} y="5" width="16" height="8" rx="4" fill="#2563eb" />
 
       {data.map((item, index) => {
         const y = 28 + index * rowHeight;
@@ -528,7 +520,7 @@ function CompactPrintBarChart({ data }: { data: Array<{ name: string; Planned: n
           <g key={item.name}>
             {index > 0 ? <line x1="0" x2={chartWidth} y1={y - 8} y2={y - 8} stroke="#e2e8f0" strokeWidth="1" /> : null}
             <text x="0" y={y + 7} fill="#334155" fontSize="11" fontWeight="700">
-              {shortenPrintLabel(item.name)}
+              {formatPrintCategoryLabel(item.name)}
             </text>
             <rect x={labelWidth} y={y - 1} width={plotWidth} height="7" rx="3.5" fill="#e2e8f0" />
             <rect x={labelWidth} y={y - 1} width={plannedWidth} height="7" rx="3.5" fill="#0f766e" />
@@ -664,8 +656,52 @@ function getTodayInputValue() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function shortenPrintLabel(value: string) {
-  return value.length > 12 ? `${value.slice(0, 10)}...` : value;
+function formatPrintWorkbookLabel(workbookData: BudgetWorkbookData | null) {
+  if (!workbookData) {
+    return "Workbook";
+  }
+
+  const workbookName = cleanWorkbookName(workbookData.workbookName);
+  const sheetName = workbookData.sheetName?.trim();
+
+  if (workbookName.toLowerCase().includes("moneysense monthly budget template")) {
+    return sheetName ? `Sample workbook, ${sheetName}` : "Sample workbook";
+  }
+
+  return sheetName ? `${workbookName}, ${sheetName}` : workbookName;
+}
+
+function cleanWorkbookName(value: string) {
+  return value
+    .replace(/\.(xlsx|xls)$/i, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim() || "Workbook";
+}
+
+function formatPrintCategoryLabel(value: string) {
+  const normalizedValue = value.toLowerCase().trim();
+  const labelMap: Record<string, string> = {
+    "housing costs": "Housing",
+    discretionary: "Discretionary",
+    financial: "Financial",
+    transportation: "Transport",
+    "family expenses": "Family",
+    "medical expenses": "Medical",
+  };
+  const mappedLabel = labelMap[normalizedValue];
+
+  if (mappedLabel) {
+    return mappedLabel;
+  }
+
+  const cleanedLabel = value
+    .replace(/\b(costs|expenses|spending|category)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const fallbackLabel = cleanedLabel || value;
+
+  return fallbackLabel.length > 14 ? `${fallbackLabel.slice(0, 12)}...` : fallbackLabel;
 }
 
 function formatPercent(value: number) {
