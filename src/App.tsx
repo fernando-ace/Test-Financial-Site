@@ -6,7 +6,7 @@ import { CategorySection } from "./components/CategorySection";
 import { KpiCard } from "./components/KpiCard";
 import { BudgetWorkbookData, parseBudgetWorkbook } from "./lib/parseBudgetWorkbook";
 
-const workbookPath = `${import.meta.env.BASE_URL}MoneySense-monthly-budget-template.xlsx`;
+const workbookPath = `${import.meta.env.BASE_URL}MoneySense-monthly-budget-template-v1.xlsx`;
 
 function App() {
   const [budgetData, setBudgetData] = useState<BudgetWorkbookData | null>(null);
