@@ -55,7 +55,7 @@ const TABLE_ZONES = [
 ];
 
 export async function parseBudgetWorkbookFromUrl(workbookUrl: string): Promise<BudgetWorkbookData> {
-  const response = await fetch(workbookUrl);
+  const response = await fetch(workbookUrl, { cache: "no-store" });
 
   if (!response.ok) {
     throw new Error(`Unable to load workbook (${response.status})`);
@@ -244,6 +244,7 @@ function slugify(value: string) {
 }
 
 function getWorkbookNameFromUrl(workbookUrl: string) {
-  const filename = workbookUrl.split("/").pop()?.replace(/\.[^.]+$/, "");
+  const cleanUrl = workbookUrl.split(/[?#]/)[0];
+  const filename = cleanUrl.split("/").pop()?.replace(/\.[^.]+$/, "");
   return filename ? filename.replace(/[-_]+/g, " ") : "Sample workbook";
 }

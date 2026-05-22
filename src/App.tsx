@@ -14,7 +14,7 @@ import {
   parseBudgetWorkbookFromUrl,
 } from "./lib/parseBudgetWorkbook";
 
-const workbookPath = `${import.meta.env.BASE_URL}MoneySense-monthly-budget-template-v1.xlsx`;
+const workbookPath = `${import.meta.env.BASE_URL}MoneySense-monthly-budget-template-v1.xlsx?v=filled-sample-20260522`;
 
 interface ReportMetadata {
   clientName: string;
