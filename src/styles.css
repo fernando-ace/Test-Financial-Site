@@ -240,10 +240,80 @@ textarea {
     overflow: hidden;
   }
 
-  .compact-print-chart svg {
-    height: auto !important;
-    max-height: 2.1in;
-    max-width: 100%;
+  .compact-print-chart-legend {
+    display: flex;
+    gap: 0.12in;
+    justify-content: flex-end;
+    margin-bottom: 0.06in;
+  }
+
+  .compact-print-chart-legend span {
+    align-items: center;
+    color: #475569;
+    display: inline-flex;
+    font-size: 7.5pt;
+    font-weight: 700;
+    gap: 0.03in;
+    text-transform: uppercase;
+  }
+
+  .compact-print-chart-legend i {
+    display: inline-block;
+    height: 0.07in;
+    width: 0.14in;
+  }
+
+  .compact-print-chart-legend .planned,
+  .compact-print-bar.planned {
+    background: #0f766e;
+  }
+
+  .compact-print-chart-legend .actual,
+  .compact-print-bar.actual {
+    background: #2563eb;
+  }
+
+  .compact-print-bar-row {
+    align-items: center;
+    display: grid;
+    grid-template-columns: 0.92in minmax(0, 1fr) 0.58in;
+    gap: 0.07in;
+    padding: 0.035in 0;
+  }
+
+  .compact-print-bar-row + .compact-print-bar-row {
+    border-top: 1px solid #e2e8f0;
+  }
+
+  .compact-print-bar-label {
+    color: #334155;
+    font-size: 8pt;
+    font-weight: 700;
+  }
+
+  .compact-print-bar-stack {
+    display: grid;
+    gap: 0.025in;
+  }
+
+  .compact-print-bar-track {
+    background: #e2e8f0;
+    border-radius: 999px;
+    height: 0.075in;
+    overflow: hidden;
+  }
+
+  .compact-print-bar {
+    border-radius: 999px;
+    display: block;
+    height: 100%;
+  }
+
+  .compact-print-bar-value {
+    color: #020617;
+    font-size: 8pt;
+    font-weight: 800;
+    text-align: right;
   }
 
   .compact-print-breakdown {

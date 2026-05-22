@@ -1,7 +1,6 @@
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileSpreadsheet, Landmark, Printer, ReceiptText, RefreshCcw, TrendingUp, Upload } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { BudgetChart } from "./components/BudgetChart";
 import { BudgetTable } from "./components/BudgetTable";
 import { CategorySection } from "./components/CategorySection";
@@ -358,7 +357,7 @@ function CompactPrintReport({
   const chartData = categories
     .filter((category) => category.type === "expense")
     .map((category) => ({
-      name: shortenPrintLabel(category.name),
+      name: category.name,
       Planned: category.planned,
       Actual: category.actual,
       basisValue: hasActualExpenses ? category.actual : category.planned,
@@ -419,15 +418,7 @@ function CompactPrintReport({
       <section className="compact-print-two-column print-block">
         <article className="compact-print-card compact-print-chart-card print-block">
           <h2>Planned vs Actual</h2>
-          <div className="compact-print-chart">
-            <BarChart width={610} height={190} data={chartData} margin={{ left: 0, right: 8, top: 8, bottom: 24 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-              <XAxis dataKey="name" tickLine={false} axisLine={false} interval={0} tick={{ fill: "#475569", fontSize: 9 }} />
-              <YAxis tickLine={false} axisLine={false} tick={{ fill: "#475569", fontSize: 9 }} tickFormatter={(value) => `$${Number(value) / 1000}k`} />
-              <Bar dataKey="Planned" fill="#0f766e" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="Actual" fill="#2563eb" radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </div>
+          <CompactPrintBarChart data={chartData} />
         </article>
 
         <article className="compact-print-card print-block">
@@ -505,6 +496,37 @@ function CompactPrintKpi({ label, value }: { label: string; value: string }) {
       <p>{label}</p>
       <strong>{value}</strong>
     </article>
+  );
+}
+
+function CompactPrintBarChart({ data }: { data: Array<{ name: string; Planned: number; Actual: number }> }) {
+  const maxValue = Math.max(...data.flatMap((item) => [item.Planned, item.Actual]), 1);
+
+  return (
+    <div className="compact-print-chart" aria-label="Planned vs Actual by category">
+      <div className="compact-print-chart-legend">
+        <span>
+          <i className="planned" /> Planned
+        </span>
+        <span>
+          <i className="actual" /> Actual
+        </span>
+      </div>
+      {data.map((item) => (
+        <div className="compact-print-bar-row" key={item.name}>
+          <div className="compact-print-bar-label">{shortenPrintLabel(item.name)}</div>
+          <div className="compact-print-bar-stack">
+            <div className="compact-print-bar-track">
+              <span className="compact-print-bar planned" style={{ width: `${Math.max((item.Planned / maxValue) * 100, 2)}%` }} />
+            </div>
+            <div className="compact-print-bar-track">
+              <span className="compact-print-bar actual" style={{ width: `${Math.max((item.Actual / maxValue) * 100, 2)}%` }} />
+            </div>
+          </div>
+          <div className="compact-print-bar-value">{formatCurrency(item.Actual)}</div>
+        </div>
+      ))}
+    </div>
   );
 }
 
