@@ -4,7 +4,7 @@
 
 :root {
   color: #14213d;
-  background: #f5f7fb;
+  background: #f8fafc;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -15,9 +15,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(20, 184, 166, 0.16), transparent 30rem),
-    linear-gradient(180deg, #f8fafc 0%, #edf2f7 52%, #f8fafc 100%);
+  background: #f8fafc;
 }
 
 button,
@@ -25,4 +23,152 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+.print-only {
+  display: none;
+}
+
+.print-report-header {
+  border-bottom: 1px solid #cbd5e1;
+  padding-bottom: 0.2in;
+}
+
+.print-report-header p {
+  margin: 0;
+  color: #0f766e;
+  font-size: 10pt;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.print-report-header h1 {
+  margin: 0.06in 0 0;
+  color: #020617;
+  font-size: 22pt;
+  font-weight: 700;
+}
+
+.print-report-header dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.12in;
+  margin: 0.16in 0 0;
+}
+
+.print-report-header dt {
+  color: #64748b;
+  font-size: 8pt;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.print-report-header dd {
+  margin: 0.03in 0 0;
+  color: #020617;
+  font-size: 10pt;
+  font-weight: 700;
+}
+
+@media (max-width: 480px) {
+  .chart-card .recharts-xAxis .recharts-cartesian-axis-tick text {
+    display: none;
+  }
+}
+
+@page {
+  size: Letter;
+  margin: 0.5in;
+}
+
+@media print {
+  :root,
+  body {
+    background: #ffffff !important;
+    color: #020617 !important;
+  }
+
+  body {
+    min-width: 0;
+  }
+
+  .no-print,
+  button,
+  input,
+  select,
+  textarea,
+  .source-rows {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  main {
+    min-height: auto !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .printable-report {
+    display: flex !important;
+    gap: 0.14in !important;
+    break-inside: auto;
+  }
+
+  .printable-report section,
+  .printable-report article,
+  .printable-report div {
+    box-shadow: none !important;
+  }
+
+  .printable-report article,
+  .printable-report > div,
+  .printable-report > section,
+  .chart-card {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    border-radius: 0.08in !important;
+  }
+
+  .printable-report .grid {
+    gap: 0.12in !important;
+  }
+
+  h1,
+  h2,
+  h3,
+  p,
+  dt,
+  dd,
+  span {
+    color: #020617 !important;
+  }
+
+  .bg-slate-50,
+  .bg-slate-100,
+  .bg-teal-50,
+  .bg-rose-50,
+  .bg-emerald-50,
+  .bg-sky-50,
+  .bg-amber-50 {
+    background: #ffffff !important;
+  }
+
+  .text-slate-500,
+  .text-slate-600 {
+    color: #475569 !important;
+  }
+
+  .h-72,
+  .sm\:h-80 {
+    height: 2.9in !important;
+  }
+
+  .h-56 {
+    height: 2.25in !important;
+  }
 }

@@ -54,7 +54,7 @@ const TABLE_ZONES = [
   { label: 7, planned: 9, actual: 10, difference: 11 },
 ];
 
-export async function parseBudgetWorkbook(workbookUrl: string): Promise<BudgetWorkbookData> {
+export async function parseBudgetWorkbookFromUrl(workbookUrl: string): Promise<BudgetWorkbookData> {
   const response = await fetch(workbookUrl);
 
   if (!response.ok) {
@@ -62,6 +62,10 @@ export async function parseBudgetWorkbook(workbookUrl: string): Promise<BudgetWo
   }
 
   const buffer = await response.arrayBuffer();
+  return parseBudgetWorkbookFromArrayBuffer(buffer, getWorkbookNameFromUrl(workbookUrl));
+}
+
+export function parseBudgetWorkbookFromArrayBuffer(buffer: ArrayBuffer, workbookName: string): BudgetWorkbookData {
   const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
   const sheetName = workbook.SheetNames.includes("Summary") ? "Summary" : workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
@@ -91,7 +95,7 @@ export async function parseBudgetWorkbook(workbookUrl: string): Promise<BudgetWo
   const plannedVsActualDifference = plannedExpenses - actualExpenses;
 
   return {
-    workbookName: "MoneySense monthly budget template",
+    workbookName,
     sheetName,
     rows,
     categories,
@@ -105,6 +109,11 @@ export async function parseBudgetWorkbook(workbookUrl: string): Promise<BudgetWo
       plannedVsActualDifference,
     },
   };
+}
+
+export function isSubtotalLabel(label: string) {
+  const normalized = label.toLowerCase().trim();
+  return normalized === "subtotal" || normalized === "total income" || normalized === "total budget balance";
 }
 
 export function convertWorkbookRowsToEditableRows(rows: BudgetRow[]): EditableBudgetRow[] {
@@ -169,7 +178,7 @@ function extractBudgetRows(sheetRows: SheetRow[]): BudgetRow[] {
         actual,
         difference,
         type: currentType,
-        isSubtotal: label.toLowerCase() === "subtotal" || label.toLowerCase().includes("total "),
+        isSubtotal: isSubtotalLabel(label),
       });
     });
   });
@@ -232,4 +241,9 @@ function parseCurrency(value: CellValue) {
 
 function slugify(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+function getWorkbookNameFromUrl(workbookUrl: string) {
+  const filename = workbookUrl.split("/").pop()?.replace(/\.[^.]+$/, "");
+  return filename ? filename.replace(/[-_]+/g, " ") : "Sample workbook";
 }

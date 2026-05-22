@@ -1,17 +1,16 @@
-# Monthly Budget Planner
+# Client Financial Snapshot
 
-A fully static Vite + React personal budget planner for GitHub Pages. The app loads the included MoneySense Excel workbook as starter template data, then lets each user edit income, expense categories, planned amounts, actual amounts, and monthly budget details directly in the browser.
+An internal advisor proof of concept for turning Excel planning workbooks into clean client-ready summaries, screenshots, and PDFs. Excel remains the source of truth; the app visualizes workbook data in the browser without requiring private advisor files to be committed to the repo.
 
 No backend, database, authentication, serverless functions, or paid services are used.
 
 ## What the App Does
 
-- Loads `MoneySense-monthly-budget-template-v1.xlsx` client-side with SheetJS/xlsx.
-- Converts workbook line items into editable React state.
-- Lets users add, edit, move, duplicate, and delete budget rows.
-- Calculates KPI cards, category cards, charts, budget balance, and planned-vs-actual differences from live edited data.
-- Saves each month separately in `localStorage`.
-- Exports the current budget as JSON or CSV and imports JSON backups.
+- Loads the included MoneySense workbook as sample demo data.
+- Lets an advisor upload a local `.xlsx` or `.xls` workbook for in-browser parsing.
+- Converts workbook line items into KPI cards, charts, source rows, and report insights.
+- Adds report metadata fields for client name, prepared by, and report date.
+- Generates a client PDF through the browser print flow.
 
 ## Tech Stack
 
@@ -39,7 +38,7 @@ npm run build
 
 The production build is written to `dist/` and is fully static.
 
-## GitHub Pages Deployment
+## GitHub Pages Deployment From `main`
 
 This repo is configured for a GitHub Project Page:
 
@@ -53,32 +52,26 @@ https://fernando-ace.github.io/Test-Financial-Site/
 base: "/Test-Financial-Site/"
 ```
 
-To publish with `gh-pages`:
-
-```bash
-npm run deploy
-```
-
-Then enable GitHub Pages in the repository settings and set the source branch to `gh-pages`.
-
-## localStorage and Privacy
-
-Budgets are stored only in the user's browser with month-specific keys such as:
+In GitHub Pages settings, use:
 
 ```text
-budget-dashboard:2026-05
+Source: Deploy from a branch
+Branch: main
+Folder: / (root)
 ```
 
-On first visit for a month, the app uses the Excel workbook as the default template. After an edit, the app saves that month to `localStorage`; refreshing the page reloads the saved browser copy instead of resetting to the template.
+Before pushing, run:
 
-Financial data is not sent to any server. Import, export, CSV download, reset, and clear actions all happen client-side.
+```bash
+npm run build:pages
+```
 
-## User Data Tools
+That command builds the Vite app, syncs the latest built bundle into root `assets/`, and updates the GitHub Pages fallback in `index.html` so the `main` branch can serve the app directly.
 
-- **Export JSON** saves the current month as a backup file.
-- **Import JSON** restores a previously exported budget into the selected month.
-- **Download CSV** exports the current editable table.
-- **Reset to template** clears the selected month's saved browser data and reloads the original Excel template.
-- **Clear all data** saves an empty budget for the selected month.
+The old `gh-pages` branch deploy command is still available as `npm run deploy:gh-pages` if it is ever needed again.
 
-Destructive actions ask for confirmation before changing saved data.
+## Privacy
+
+The sample workbook in `public/` is demo data. Real advisor workbooks do not need to be committed to `/public` or bundled with the app.
+
+Uploaded Excel files are parsed locally in the browser for this proof of concept. Financial workbook data is not sent to a server by the app.

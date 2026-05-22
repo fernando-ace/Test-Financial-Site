@@ -21,19 +21,19 @@ export function KpiCard({ label, value, icon: Icon, tone, signed = false, captio
   const isPositive = value >= 0;
 
   return (
-    <article className="min-w-0 rounded-3xl border border-white/80 bg-white/90 p-5 shadow-soft shadow-slate-200/70 backdrop-blur">
+    <article className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-sm font-medium text-slate-500">{label}</p>
-          <p className="mt-3 text-2xl font-semibold tracking-normal text-slate-950 sm:text-3xl">
+          <p className="mt-2 text-2xl font-semibold tracking-normal text-slate-950">
             {signed ? formatSignedCurrency(value) : formatCurrency(value)}
           </p>
         </div>
-        <div className={`rounded-2xl p-3 ring-1 ${toneStyles[tone]}`}>
+        <div className={`rounded-lg p-2.5 ring-1 ${toneStyles[tone]}`}>
           <Icon className="h-5 w-5" aria-hidden="true" />
         </div>
       </div>
-      <div className="mt-5 flex items-center gap-2 text-sm text-slate-500">
+      <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
         {isPositive ? (
           <ArrowUpRight className="h-4 w-4 text-emerald-500" aria-hidden="true" />
         ) : (
