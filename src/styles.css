@@ -80,7 +80,7 @@ textarea {
 
 @page {
   size: Letter;
-  margin: 0.5in;
+  margin: 0.45in;
 }
 
 @media print {
@@ -95,6 +95,7 @@ textarea {
   }
 
   .no-print,
+  .web-report,
   button,
   input,
   select,
@@ -103,12 +104,8 @@ textarea {
     display: none !important;
   }
 
-  .print-only {
+  .print-only.compact-print-report {
     display: block !important;
-  }
-
-  .advisor-notes-empty {
-    display: none !important;
   }
 
   main {
@@ -118,185 +115,206 @@ textarea {
   }
 
   main > div {
+    display: block !important;
     max-width: none !important;
-    gap: 0.12in !important;
   }
 
-  .printable-report {
-    display: flex !important;
-    gap: 0.12in !important;
-    break-inside: auto;
-  }
-
-  .printable-report section,
-  .printable-report article,
-  .printable-report div {
+  .compact-print-report,
+  .compact-print-report * {
     box-shadow: none !important;
   }
 
-  .printable-report article,
-  .printable-report > div,
-  .printable-report > section,
-  .chart-card {
-    background: #ffffff !important;
-    border-color: #cbd5e1 !important;
-    border-radius: 0.08in !important;
+  .compact-print-report {
+    color: #020617;
+    font-size: 9pt;
+    line-height: 1.35;
   }
 
-  .printable-report .grid {
-    gap: 0.12in !important;
-  }
-
-  .workbook-summary,
-  .kpi-card,
-  .chart-card,
-  .category-card,
-  .insight-card,
-  .advisor-notes {
+  .print-block {
     break-inside: avoid;
     page-break-inside: avoid;
-    padding: 0.12in !important;
   }
 
-  .charts-section {
-    break-before: auto;
-    break-inside: avoid;
-    display: grid !important;
-    grid-template-columns: minmax(0, 1.35fr) minmax(2in, 0.65fr) !important;
-    page-break-inside: avoid;
+  .compact-print-header {
+    border-bottom: 1px solid #cbd5e1;
+    margin-bottom: 0.12in;
+    padding-bottom: 0.12in;
   }
 
-  .chart-card {
-    min-height: auto !important;
+  .compact-print-header p {
+    margin: 0;
+    color: #0f766e;
+    font-size: 9pt;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
-  .top-categories-section {
-    break-inside: avoid;
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr) minmax(1.8in, 0.45fr) !important;
-    page-break-inside: avoid;
+  .compact-print-report h1 {
+    color: #020617;
+    font-size: 22pt;
+    line-height: 1.1;
+    margin: 0.04in 0 0;
   }
 
-  .top-categories-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  .compact-print-report h2 {
+    color: #020617;
+    font-size: 12pt;
+    line-height: 1.15;
+    margin: 0 0 0.08in;
   }
 
-  .top-categories-section .category-card:nth-of-type(n + 5) {
-    display: none !important;
+  .compact-print-header dl {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.08in;
+    margin: 0.1in 0 0;
   }
 
-  .kpi-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  .compact-print-report dt {
+    color: #64748b;
+    font-size: 7.5pt;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
   }
 
-  .kpi-card p {
-    margin-top: 0.04in !important;
+  .compact-print-report dd {
+    margin: 0.02in 0 0;
+    color: #020617;
+    font-weight: 700;
   }
 
-  .kpi-card .text-2xl {
-    font-size: 15pt !important;
-    line-height: 1.15 !important;
+  .compact-print-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.1in;
+    margin-bottom: 0.12in;
   }
 
-  .kpi-card .mt-4 {
-    margin-top: 0.08in !important;
+  .compact-print-card {
+    border: 1px solid #cbd5e1;
+    border-radius: 0.08in;
+    padding: 0.1in;
   }
 
-  .category-card {
-    padding: 0.1in !important;
+  .compact-print-card p {
+    margin: 0;
   }
 
-  .category-card h3 {
-    font-size: 10pt !important;
-    line-height: 1.2 !important;
+  .compact-print-grid p {
+    color: #64748b;
+    font-size: 7.5pt;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
   }
 
-  .category-card p,
-  .category-card span {
-    font-size: 8.5pt !important;
+  .compact-print-grid strong {
+    color: #020617;
+    display: block;
+    font-size: 14pt;
+    line-height: 1.15;
+    margin-top: 0.03in;
   }
 
-  .category-card .mt-4 {
-    margin-top: 0.08in !important;
+  .compact-print-two-column {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(2in, 0.65fr);
+    gap: 0.1in;
+    margin-bottom: 0.12in;
   }
 
-  .category-card .gap-2 {
-    gap: 0.05in !important;
+  .compact-print-bottom-row {
+    align-items: start;
+    grid-template-columns: minmax(0, 1.25fr) minmax(2.2in, 0.75fr);
   }
 
-  .insight-card dl {
-    margin-top: 0.1in !important;
-    gap: 0 !important;
+  .compact-print-chart-card {
+    overflow: hidden;
   }
 
-  .insight-card .space-y-4 > :not([hidden]) ~ :not([hidden]) {
-    margin-top: 0.1in !important;
+  .compact-print-chart {
+    height: 2.1in;
+    max-height: 2.1in;
+    overflow: hidden;
   }
 
-  h1,
-  h2,
-  h3,
-  p,
-  dt,
-  dd,
-  span {
-    color: #020617 !important;
+  .compact-print-chart svg {
+    height: auto !important;
+    max-height: 2.1in;
+    max-width: 100%;
   }
 
-  .bg-slate-50,
-  .bg-slate-100,
-  .bg-teal-50,
-  .bg-rose-50,
-  .bg-emerald-50,
-  .bg-sky-50,
-  .bg-amber-50 {
-    background: #ffffff !important;
+  .compact-print-breakdown {
+    list-style: none;
+    margin: 0;
+    padding: 0;
   }
 
-  .text-slate-500,
-  .text-slate-600 {
-    color: #475569 !important;
+  .compact-print-breakdown li {
+    align-items: baseline;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    gap: 0.08in;
+    justify-content: space-between;
+    padding: 0.045in 0;
   }
 
-  .chart-card .h-72,
-  .chart-card .sm\:h-80 {
-    height: 2.2in !important;
+  .compact-print-breakdown span {
+    color: #334155;
   }
 
-  .chart-card .h-56 {
-    height: 1.65in !important;
+  .compact-print-breakdown strong {
+    color: #020617;
+    white-space: nowrap;
   }
 
-  .chart-card h2,
-  .insight-card h2,
-  .advisor-notes h2 {
-    font-size: 13pt !important;
-    line-height: 1.2 !important;
+  .compact-print-breakdown em {
+    color: #64748b;
+    font-style: normal;
+    font-weight: 600;
   }
 
-  .chart-card p,
-  .insight-card,
-  .advisor-notes {
-    font-size: 9pt !important;
+  .compact-print-table {
+    border-collapse: collapse;
+    font-size: 8.5pt;
+    width: 100%;
   }
 
-  .chart-card .mb-4 {
-    margin-bottom: 0.08in !important;
+  .compact-print-table th,
+  .compact-print-table td {
+    border-bottom: 1px solid #e2e8f0;
+    padding: 0.05in;
+    text-align: left;
   }
 
-  .chart-card .mt-3 {
-    margin-top: 0.08in !important;
+  .compact-print-table th {
+    color: #475569;
+    font-size: 7.5pt;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
 
-  .print-report-header {
-    padding-bottom: 0.14in;
+  .compact-print-table td.numeric,
+  .compact-print-table th.numeric {
+    text-align: right;
   }
 
-  .print-report-header h1 {
-    font-size: 20pt;
+  .compact-print-insights {
+    margin: 0;
   }
 
-  .print-report-header dl {
+  .compact-print-insights div + div {
+    margin-top: 0.07in;
+  }
+
+  .compact-print-notes {
     margin-top: 0.12in;
+  }
+
+  .compact-print-notes p {
+    margin: 0;
+    white-space: pre-wrap;
   }
 }

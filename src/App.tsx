@@ -1,11 +1,12 @@
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileSpreadsheet, Landmark, Printer, ReceiptText, RefreshCcw, TrendingUp, Upload } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { BudgetChart } from "./components/BudgetChart";
 import { BudgetTable } from "./components/BudgetTable";
 import { CategorySection } from "./components/CategorySection";
 import { KpiCard } from "./components/KpiCard";
-import { EditableBudgetRow, BudgetTotals, calculateBudgetTotals, groupRowsByCategory } from "./lib/budgetModel";
+import { CategoryGroup, EditableBudgetRow, BudgetTotals, calculateBudgetTotals, groupRowsByCategory } from "./lib/budgetModel";
 import { formatCurrency, formatSignedCurrency } from "./lib/formatters";
 import {
   BudgetWorkbookData,
@@ -63,15 +64,15 @@ function App() {
   const reportBasis = useMemo(() => getReportBasis(totals), [totals]);
   const categories = useMemo(() => groupRowsByCategory(rows), [rows]);
   const expenseCategories = useMemo(() => categories.filter((category) => category.type === "expense"), [categories]);
-  const topCategories = useMemo(() => {
-    const sortedCategories = [...expenseCategories].sort((first, second) => {
+  const sortedExpenseCategories = useMemo(() => {
+    return [...expenseCategories].sort((first, second) => {
       const firstValue = reportBasis.hasActualExpenses ? first.actual : first.planned;
       const secondValue = reportBasis.hasActualExpenses ? second.actual : second.planned;
       return secondValue - firstValue;
     });
-
-    return showAllCategories ? sortedCategories : sortedCategories.slice(0, 6);
-  }, [expenseCategories, reportBasis.hasActualExpenses, showAllCategories]);
+  }, [expenseCategories, reportBasis.hasActualExpenses]);
+  const topCategories = useMemo(() => (showAllCategories ? sortedExpenseCategories : sortedExpenseCategories.slice(0, 6)), [showAllCategories, sortedExpenseCategories]);
+  const printTopCategories = useMemo(() => sortedExpenseCategories.slice(0, 5), [sortedExpenseCategories]);
   const insights = useMemo(() => getInsights(expenseCategories, totals, reportBasis.hasActualExpenses), [expenseCategories, totals, reportBasis.hasActualExpenses]);
   const reportDateLabel = formatDateLabel(metadata.reportDate);
 
@@ -211,122 +212,299 @@ function App() {
           </div>
         </header>
 
-        <section className="print-only print-report-header">
-          <p>Excel report visualizer</p>
-          <h1>Client Financial Snapshot</h1>
-          <dl>
-            <div>
-              <dt>Client</dt>
-              <dd>{metadata.clientName || "Not specified"}</dd>
-            </div>
-            <div>
-              <dt>Prepared by</dt>
-              <dd>{metadata.preparedBy || "Not specified"}</dd>
-            </div>
-            <div>
-              <dt>Date</dt>
-              <dd>{reportDateLabel}</dd>
-            </div>
-          </dl>
-        </section>
-
-        {isLoading ? <LoadingState /> : null}
-        {error ? <ErrorState message={error} /> : null}
-
-        {!isLoading && !error && rows.length === 0 ? (
-          <section className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center shadow-sm">
-            <h2 className="text-xl font-semibold text-slate-950">No workbook loaded</h2>
-            <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">
-              Upload an Excel file to create a client snapshot, or load the sample report to preview the dashboard.
-            </p>
-          </section>
+        {!isLoading && rows.length > 0 ? (
+          <CompactPrintReport
+            advisorNotes={advisorNotes}
+            categories={categories}
+            hasActualExpenses={reportBasis.hasActualExpenses}
+            insights={insights}
+            metadata={metadata}
+            reportDateLabel={reportDateLabel}
+            topCategories={printTopCategories}
+            totals={totals}
+            workbookData={workbookData}
+            rowCount={rows.length}
+            netCashFlow={reportBasis.netCashFlow}
+          />
         ) : null}
 
-        {!isLoading && rows.length > 0 ? (
-          <section className="printable-report flex min-w-0 flex-col gap-4">
-            <div className="workbook-summary rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Workbook snapshot</p>
-                  <h2 className="mt-1 text-xl font-semibold text-slate-950">{metadata.clientName || "Client financial summary"}</h2>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Source: {workbookData?.workbookName ?? "Workbook"}{workbookData?.sheetName ? `, ${workbookData.sheetName} sheet` : ""}
-                  </p>
-                </div>
-                <div className="grid gap-2 text-sm text-slate-600 sm:grid-cols-3 lg:min-w-[420px]">
-                  <ReportMetaItem label="Prepared by" value={metadata.preparedBy || "Not specified"} />
-                  <ReportMetaItem label="Report date" value={reportDateLabel} />
-                  <ReportMetaItem label="Rows parsed" value={String(rows.length)} />
-                </div>
-              </div>
-            </div>
+        <section className="web-report flex min-w-0 flex-col gap-4">
+          {isLoading ? <LoadingState /> : null}
+          {error ? <ErrorState message={error} /> : null}
 
-            {!reportBasis.hasActualExpenses ? (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
-                Actual spending is not filled in yet, so charts use planned values.
-              </div>
-            ) : null}
-
-            <section className="kpi-grid grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <KpiCard label="Total income" value={totals.totalIncome} icon={Landmark} tone="income" caption="Workbook income basis" />
-              <KpiCard label="Planned expenses" value={totals.plannedExpenses} icon={ReceiptText} tone="expense" caption="Planned client outflows" />
-              <KpiCard label="Actual expenses" value={totals.actualExpenses} icon={FileSpreadsheet} tone="expense" caption="Actuals in workbook" />
-              <KpiCard label="Net cash flow" value={reportBasis.netCashFlow} icon={TrendingUp} tone="balance" signed caption={reportBasis.netCashFlowCaption} />
+          {!isLoading && !error && rows.length === 0 ? (
+            <section className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center shadow-sm">
+              <h2 className="text-xl font-semibold text-slate-950">No workbook loaded</h2>
+              <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">
+                Upload an Excel file to create a client snapshot, or load the sample report to preview the dashboard.
+              </p>
             </section>
+          ) : null}
 
-            <BudgetChart categories={categories} totals={totals} hasActualExpenses={reportBasis.hasActualExpenses} />
-
-            <section className="top-categories-section grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-              <div className="min-w-0">
-                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          {!isLoading && rows.length > 0 ? (
+            <section className="printable-report flex min-w-0 flex-col gap-4">
+              <div className="workbook-summary rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <h2 className="text-xl font-semibold text-slate-950">Top expense categories</h2>
-                    <p className="text-sm text-slate-500">
-                      Ranked by {reportBasis.hasActualExpenses ? "actual spending" : "planned spending"} for the current workbook.
+                    <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Workbook snapshot</p>
+                    <h2 className="mt-1 text-xl font-semibold text-slate-950">{metadata.clientName || "Client financial summary"}</h2>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Source: {workbookData?.workbookName ?? "Workbook"}{workbookData?.sheetName ? `, ${workbookData.sheetName} sheet` : ""}
                     </p>
                   </div>
-                  {expenseCategories.length > 6 ? (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllCategories((value) => !value)}
-                      className="no-print rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 sm:self-start"
-                    >
-                      {showAllCategories ? "Show top 6" : "Show all categories"}
-                    </button>
-                  ) : null}
-                </div>
-                <div className="top-categories-grid grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {topCategories.map((category) => (
-                    <CategorySection key={category.name} category={category} useActualValues={reportBasis.hasActualExpenses} />
-                  ))}
+                  <div className="grid gap-2 text-sm text-slate-600 sm:grid-cols-3 lg:min-w-[420px]">
+                    <ReportMetaItem label="Prepared by" value={metadata.preparedBy || "Not specified"} />
+                    <ReportMetaItem label="Report date" value={reportDateLabel} />
+                    <ReportMetaItem label="Rows parsed" value={String(rows.length)} />
+                  </div>
                 </div>
               </div>
 
-              <InsightCard insights={insights} hasActualExpenses={reportBasis.hasActualExpenses} />
+              {!reportBasis.hasActualExpenses ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+                  Actual spending is not filled in yet, so charts use planned values.
+                </div>
+              ) : null}
+
+              <section className="kpi-grid grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <KpiCard label="Total income" value={totals.totalIncome} icon={Landmark} tone="income" caption="Workbook income basis" />
+                <KpiCard label="Planned expenses" value={totals.plannedExpenses} icon={ReceiptText} tone="expense" caption="Planned client outflows" />
+                <KpiCard label="Actual expenses" value={totals.actualExpenses} icon={FileSpreadsheet} tone="expense" caption="Actuals in workbook" />
+                <KpiCard label="Net cash flow" value={reportBasis.netCashFlow} icon={TrendingUp} tone="balance" signed caption={reportBasis.netCashFlowCaption} />
+              </section>
+
+              <BudgetChart categories={categories} totals={totals} hasActualExpenses={reportBasis.hasActualExpenses} />
+
+              <section className="top-categories-section grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+                <div className="min-w-0">
+                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h2 className="text-xl font-semibold text-slate-950">Top expense categories</h2>
+                      <p className="text-sm text-slate-500">
+                        Ranked by {reportBasis.hasActualExpenses ? "actual spending" : "planned spending"} for the current workbook.
+                      </p>
+                    </div>
+                    {expenseCategories.length > 6 ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllCategories((value) => !value)}
+                        className="no-print rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 sm:self-start"
+                      >
+                        {showAllCategories ? "Show top 6" : "Show all categories"}
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="top-categories-grid grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {topCategories.map((category) => (
+                      <CategorySection key={category.name} category={category} useActualValues={reportBasis.hasActualExpenses} />
+                    ))}
+                  </div>
+                </div>
+
+                <InsightCard insights={insights} hasActualExpenses={reportBasis.hasActualExpenses} />
+              </section>
+
+              {advisorNotes.trim() ? (
+                <section className="advisor-notes rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h2 className="text-lg font-semibold text-slate-950">Advisor notes</h2>
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{advisorNotes}</p>
+                </section>
+              ) : (
+                <section className="advisor-notes advisor-notes-empty rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h2 className="text-lg font-semibold text-slate-950">Advisor notes</h2>
+                  <textarea
+                    value={advisorNotes}
+                    onChange={(event) => setAdvisorNotes(event.target.value)}
+                    placeholder="Add optional notes for the client report..."
+                    className="mt-3 min-h-24 w-full rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                  />
+                </section>
+              )}
             </section>
+          ) : null}
 
-            {advisorNotes.trim() ? (
-              <section className="advisor-notes rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 className="text-lg font-semibold text-slate-950">Advisor notes</h2>
-                <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{advisorNotes}</p>
-              </section>
-            ) : (
-              <section className="advisor-notes advisor-notes-empty rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 className="text-lg font-semibold text-slate-950">Advisor notes</h2>
-                <textarea
-                  value={advisorNotes}
-                  onChange={(event) => setAdvisorNotes(event.target.value)}
-                  placeholder="Add optional notes for the client report..."
-                  className="mt-3 min-h-24 w-full rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                />
-              </section>
-            )}
-          </section>
-        ) : null}
-
-        {!isLoading && rows.length > 0 ? <BudgetTable rows={rows} /> : null}
+          {!isLoading && rows.length > 0 ? <BudgetTable rows={rows} /> : null}
+        </section>
       </div>
     </main>
+  );
+}
+
+function CompactPrintReport({
+  advisorNotes,
+  categories,
+  hasActualExpenses,
+  insights,
+  metadata,
+  netCashFlow,
+  reportDateLabel,
+  rowCount,
+  topCategories,
+  totals,
+  workbookData,
+}: {
+  advisorNotes: string;
+  categories: CategoryGroup[];
+  hasActualExpenses: boolean;
+  insights: ReturnType<typeof getInsights>;
+  metadata: ReportMetadata;
+  netCashFlow: number;
+  reportDateLabel: string;
+  rowCount: number;
+  topCategories: CategoryGroup[];
+  totals: BudgetTotals;
+  workbookData: BudgetWorkbookData | null;
+}) {
+  const chartData = categories
+    .filter((category) => category.type === "expense")
+    .map((category) => ({
+      name: shortenPrintLabel(category.name),
+      Planned: category.planned,
+      Actual: category.actual,
+      basisValue: hasActualExpenses ? category.actual : category.planned,
+    }))
+    .sort((first, second) => second.basisValue - first.basisValue)
+    .slice(0, 6);
+  const spendingBreakdown = topCategories.map((category) => {
+    const value = hasActualExpenses ? category.actual : category.planned;
+    const denominator = hasActualExpenses ? totals.actualExpenses : totals.plannedExpenses;
+
+    return {
+      name: category.name,
+      value,
+      share: denominator > 0 ? value / denominator : 0,
+    };
+  });
+  const notes = advisorNotes.trim();
+
+  return (
+    <section className="print-only compact-print-report">
+      <header className="compact-print-header print-block">
+        <p>Excel report visualizer</p>
+        <h1>Client Financial Snapshot</h1>
+        <dl>
+          <div>
+            <dt>Client</dt>
+            <dd>{metadata.clientName || "Not specified"}</dd>
+          </div>
+          <div>
+            <dt>Prepared by</dt>
+            <dd>{metadata.preparedBy || "Not specified"}</dd>
+          </div>
+          <div>
+            <dt>Date</dt>
+            <dd>{reportDateLabel}</dd>
+          </div>
+          <div>
+            <dt>Workbook</dt>
+            <dd>
+              {workbookData?.workbookName ?? "Workbook"}
+              {workbookData?.sheetName ? `, ${workbookData.sheetName}` : ""}
+            </dd>
+          </div>
+          <div>
+            <dt>Rows parsed</dt>
+            <dd>{rowCount}</dd>
+          </div>
+        </dl>
+      </header>
+
+      <section className="compact-print-grid print-block">
+        <CompactPrintKpi label="Total income" value={formatCurrency(totals.totalIncome)} />
+        <CompactPrintKpi label="Planned expenses" value={formatCurrency(totals.plannedExpenses)} />
+        <CompactPrintKpi label="Actual expenses" value={formatCurrency(totals.actualExpenses)} />
+        <CompactPrintKpi label="Net cash flow" value={formatSignedCurrency(netCashFlow)} />
+      </section>
+
+      <section className="compact-print-two-column print-block">
+        <article className="compact-print-card compact-print-chart-card print-block">
+          <h2>Planned vs Actual</h2>
+          <div className="compact-print-chart">
+            <BarChart width={610} height={190} data={chartData} margin={{ left: 0, right: 8, top: 8, bottom: 24 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+              <XAxis dataKey="name" tickLine={false} axisLine={false} interval={0} tick={{ fill: "#475569", fontSize: 9 }} />
+              <YAxis tickLine={false} axisLine={false} tick={{ fill: "#475569", fontSize: 9 }} tickFormatter={(value) => `$${Number(value) / 1000}k`} />
+              <Bar dataKey="Planned" fill="#0f766e" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="Actual" fill="#2563eb" radius={[3, 3, 0, 0]} />
+            </BarChart>
+          </div>
+        </article>
+
+        <article className="compact-print-card print-block">
+          <h2>Spending Breakdown</h2>
+          <ul className="compact-print-breakdown" aria-label="Spending breakdown">
+            {spendingBreakdown.map((item) => (
+              <li key={item.name}>
+                <span>{item.name}</span>
+                <strong>
+                  {formatCurrency(item.value)} <em>{formatPercent(item.share)}</em>
+                </strong>
+              </li>
+            ))}
+          </ul>
+        </article>
+      </section>
+
+      <section className="compact-print-two-column compact-print-bottom-row">
+        <article className="compact-print-card print-block">
+          <h2>Top Categories</h2>
+          <table className="compact-print-table">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th className="numeric">Planned</th>
+                <th className="numeric">Actual</th>
+                <th className="numeric">Difference</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topCategories.map((category) => (
+                <tr key={category.name}>
+                  <td>{category.name}</td>
+                  <td className="numeric">{formatCurrency(category.planned)}</td>
+                  <td className="numeric">{formatCurrency(category.actual)}</td>
+                  <td className="numeric">{formatSignedCurrency(category.difference)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </article>
+
+        <article className="compact-print-card print-block">
+          <h2>Snapshot Insights</h2>
+          <dl className="compact-print-insights">
+            <div>
+              <dt>Largest planned category</dt>
+              <dd>{insights.largestPlanned}</dd>
+            </div>
+            <div>
+              <dt>Largest actual category</dt>
+              <dd>{hasActualExpenses ? insights.largestActual : "Actual spending not filled in"}</dd>
+            </div>
+            <div>
+              <dt>Planned spending variance</dt>
+              <dd>{insights.variance}</dd>
+            </div>
+          </dl>
+        </article>
+      </section>
+
+      {notes ? (
+        <section className="compact-print-card compact-print-notes print-block">
+          <h2>Advisor Notes</h2>
+          <p>{notes}</p>
+        </section>
+      ) : null}
+    </section>
+  );
+}
+
+function CompactPrintKpi({ label, value }: { label: string; value: string }) {
+  return (
+    <article className="compact-print-card">
+      <p>{label}</p>
+      <strong>{value}</strong>
+    </article>
   );
 }
 
@@ -448,6 +626,14 @@ function getInsights(categories: ReturnType<typeof groupRowsByCategory>, totals:
 
 function getTodayInputValue() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function shortenPrintLabel(value: string) {
+  return value.length > 12 ? `${value.slice(0, 10)}...` : value;
+}
+
+function formatPercent(value: number) {
+  return `${Math.round(value * 100)}%`;
 }
 
 function formatDateLabel(value: string) {
