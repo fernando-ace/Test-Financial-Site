@@ -28,7 +28,7 @@ export function BudgetChart({ categories, totals, hasActualExpenses }: BudgetCha
     .slice(0, 7);
 
   return (
-    <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]">
+    <section className="charts-section grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]">
       <article className="chart-card min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>

@@ -32,6 +32,7 @@ function App() {
     reportDate: getTodayInputValue(),
   });
   const [showAllCategories, setShowAllCategories] = useState(false);
+  const [advisorNotes, setAdvisorNotes] = useState("");
   const [statusMessage, setStatusMessage] = useState("Loading sample workbook");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -45,6 +46,7 @@ function App() {
       setWorkbookData(data);
       setRows(convertWorkbookRowsToEditableRows(data.rows));
       setShowAllCategories(false);
+      setAdvisorNotes("");
       setStatusMessage("Sample workbook loaded");
     } catch (caughtError: unknown) {
       setError(caughtError instanceof Error ? caughtError.message : "The sample workbook could not be loaded.");
@@ -94,6 +96,7 @@ function App() {
         setWorkbookData(data);
         setRows(convertWorkbookRowsToEditableRows(data.rows));
         setShowAllCategories(false);
+        setAdvisorNotes("");
         setStatusMessage(`${file.name} loaded locally`);
       } catch (caughtError: unknown) {
         setError(caughtError instanceof Error ? caughtError.message : "The selected workbook could not be parsed.");
@@ -131,6 +134,7 @@ function App() {
       reportDate: getTodayInputValue(),
     });
     setShowAllCategories(false);
+    setAdvisorNotes("");
     setError(null);
     setStatusMessage("Current report cleared. Upload an Excel file or load the sample report.");
 
@@ -158,19 +162,24 @@ function App() {
               <p className="mt-1 text-xs font-medium text-slate-500">Excel files are parsed locally in your browser for this proof of concept.</p>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-3 lg:w-auto">
-              <ActionButton icon={Upload} label="Upload Excel" onClick={() => fileInputRef.current?.click()} />
-              <ActionButton icon={RefreshCcw} label="Load sample" onClick={() => void loadSampleWorkbook()} />
-              <ActionButton
-                icon={Printer}
-                label="Generate Client PDF"
-                onClick={() => {
-                  if (rows.length > 0) {
-                    window.print();
-                  }
-                }}
-                primary
-              />
+            <div className="lg:w-auto">
+              <div className="grid gap-2 sm:grid-cols-3">
+                <ActionButton icon={Upload} label="Upload Excel" onClick={() => fileInputRef.current?.click()} />
+                <ActionButton icon={RefreshCcw} label="Load sample" onClick={() => void loadSampleWorkbook()} />
+                <ActionButton
+                  icon={Printer}
+                  label="Generate Client PDF"
+                  onClick={() => {
+                    if (rows.length > 0) {
+                      window.print();
+                    }
+                  }}
+                  primary
+                />
+              </div>
+              <p className="no-print mt-2 max-w-md text-xs leading-5 text-slate-500">
+                When saving as PDF, turn off browser headers and footers for the cleanest report.
+              </p>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -235,7 +244,7 @@ function App() {
 
         {!isLoading && rows.length > 0 ? (
           <section className="printable-report flex min-w-0 flex-col gap-4">
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="workbook-summary rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Workbook snapshot</p>
@@ -258,7 +267,7 @@ function App() {
               </div>
             ) : null}
 
-            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <section className="kpi-grid grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <KpiCard label="Total income" value={totals.totalIncome} icon={Landmark} tone="income" caption="Workbook income basis" />
               <KpiCard label="Planned expenses" value={totals.plannedExpenses} icon={ReceiptText} tone="expense" caption="Planned client outflows" />
               <KpiCard label="Actual expenses" value={totals.actualExpenses} icon={FileSpreadsheet} tone="expense" caption="Actuals in workbook" />
@@ -267,7 +276,7 @@ function App() {
 
             <BudgetChart categories={categories} totals={totals} hasActualExpenses={reportBasis.hasActualExpenses} />
 
-            <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <section className="top-categories-section grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
               <div className="min-w-0">
                 <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                   <div>
@@ -286,7 +295,7 @@ function App() {
                     </button>
                   ) : null}
                 </div>
-                <div className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <div className="top-categories-grid grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {topCategories.map((category) => (
                     <CategorySection key={category.name} category={category} useActualValues={reportBasis.hasActualExpenses} />
                   ))}
@@ -296,10 +305,22 @@ function App() {
               <InsightCard insights={insights} hasActualExpenses={reportBasis.hasActualExpenses} />
             </section>
 
-            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-950">Advisor notes</h2>
-              <div className="mt-3 min-h-24 rounded-lg border border-dashed border-slate-300 bg-slate-50" aria-label="Optional notes area" />
-            </section>
+            {advisorNotes.trim() ? (
+              <section className="advisor-notes rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h2 className="text-lg font-semibold text-slate-950">Advisor notes</h2>
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{advisorNotes}</p>
+              </section>
+            ) : (
+              <section className="advisor-notes advisor-notes-empty rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h2 className="text-lg font-semibold text-slate-950">Advisor notes</h2>
+                <textarea
+                  value={advisorNotes}
+                  onChange={(event) => setAdvisorNotes(event.target.value)}
+                  placeholder="Add optional notes for the client report..."
+                  className="mt-3 min-h-24 w-full rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                />
+              </section>
+            )}
           </section>
         ) : null}
 
@@ -371,7 +392,7 @@ function ErrorState({ message }: { message: string }) {
 
 function InsightCard({ insights, hasActualExpenses }: { insights: ReturnType<typeof getInsights>; hasActualExpenses: boolean }) {
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <article className="insight-card rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-lg font-semibold text-slate-950">Snapshot insights</h2>
       <dl className="mt-4 space-y-4 text-sm">
         <Insight label="Largest planned category" value={insights.largestPlanned} />

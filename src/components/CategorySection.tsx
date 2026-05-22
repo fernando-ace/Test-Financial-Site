@@ -12,7 +12,7 @@ export function CategorySection({ category, useActualValues }: CategorySectionPr
   const progress = category.planned > 0 ? Math.min((category.actual / category.planned) * 100, 100) : category.actual > 0 ? 100 : 0;
 
   return (
-    <article className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <article className="category-card min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="break-words text-base font-semibold text-slate-950">{category.name}</h3>

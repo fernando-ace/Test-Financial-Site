@@ -107,15 +107,24 @@ textarea {
     display: block !important;
   }
 
+  .advisor-notes-empty {
+    display: none !important;
+  }
+
   main {
     min-height: auto !important;
     padding: 0 !important;
     background: #ffffff !important;
   }
 
+  main > div {
+    max-width: none !important;
+    gap: 0.12in !important;
+  }
+
   .printable-report {
     display: flex !important;
-    gap: 0.14in !important;
+    gap: 0.12in !important;
     break-inside: auto;
   }
 
@@ -136,6 +145,92 @@ textarea {
 
   .printable-report .grid {
     gap: 0.12in !important;
+  }
+
+  .workbook-summary,
+  .kpi-card,
+  .chart-card,
+  .category-card,
+  .insight-card,
+  .advisor-notes {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    padding: 0.12in !important;
+  }
+
+  .charts-section {
+    break-before: auto;
+    break-inside: avoid;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1.35fr) minmax(2in, 0.65fr) !important;
+    page-break-inside: avoid;
+  }
+
+  .chart-card {
+    min-height: auto !important;
+  }
+
+  .top-categories-section {
+    break-inside: avoid;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(1.8in, 0.45fr) !important;
+    page-break-inside: avoid;
+  }
+
+  .top-categories-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .top-categories-section .category-card:nth-of-type(n + 5) {
+    display: none !important;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  .kpi-card p {
+    margin-top: 0.04in !important;
+  }
+
+  .kpi-card .text-2xl {
+    font-size: 15pt !important;
+    line-height: 1.15 !important;
+  }
+
+  .kpi-card .mt-4 {
+    margin-top: 0.08in !important;
+  }
+
+  .category-card {
+    padding: 0.1in !important;
+  }
+
+  .category-card h3 {
+    font-size: 10pt !important;
+    line-height: 1.2 !important;
+  }
+
+  .category-card p,
+  .category-card span {
+    font-size: 8.5pt !important;
+  }
+
+  .category-card .mt-4 {
+    margin-top: 0.08in !important;
+  }
+
+  .category-card .gap-2 {
+    gap: 0.05in !important;
+  }
+
+  .insight-card dl {
+    margin-top: 0.1in !important;
+    gap: 0 !important;
+  }
+
+  .insight-card .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.1in !important;
   }
 
   h1,
@@ -163,12 +258,45 @@ textarea {
     color: #475569 !important;
   }
 
-  .h-72,
-  .sm\:h-80 {
-    height: 2.9in !important;
+  .chart-card .h-72,
+  .chart-card .sm\:h-80 {
+    height: 2.2in !important;
   }
 
-  .h-56 {
-    height: 2.25in !important;
+  .chart-card .h-56 {
+    height: 1.65in !important;
+  }
+
+  .chart-card h2,
+  .insight-card h2,
+  .advisor-notes h2 {
+    font-size: 13pt !important;
+    line-height: 1.2 !important;
+  }
+
+  .chart-card p,
+  .insight-card,
+  .advisor-notes {
+    font-size: 9pt !important;
+  }
+
+  .chart-card .mb-4 {
+    margin-bottom: 0.08in !important;
+  }
+
+  .chart-card .mt-3 {
+    margin-top: 0.08in !important;
+  }
+
+  .print-report-header {
+    padding-bottom: 0.14in;
+  }
+
+  .print-report-header h1 {
+    font-size: 20pt;
+  }
+
+  .print-report-header dl {
+    margin-top: 0.12in;
   }
 }
