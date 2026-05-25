@@ -5,17 +5,15 @@ import {
   AnnualCashFlowSummary,
   IncomeLadderReport,
   MaturityEvent,
+  MonthlyCashFlowRow,
   parseIncomeLadderWorkbookFromArrayBuffer,
 } from "./lib/parseIncomeLadderWorkbook";
 import { formatCurrency, formatSignedCurrency } from "./lib/formatters";
 import {
   Bar,
-  BarChart,
   CartesianGrid,
-  Cell,
   ComposedChart,
   Legend,
-  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -28,7 +26,35 @@ interface ReportMetadata {
   reportDate: string;
 }
 
+interface DisplayMetrics {
+  totalSpendingGoal: number;
+  totalNetIncome: number;
+  totalIraDistributions: number;
+  totalCmaWithdrawals: number;
+  totalPortfolioDistributions: number;
+  totalSurplusDeficit: number;
+  firstShortfallMonth?: string;
+  shortfallMonthCount: number;
+}
+
+type AnnualCoverageRow = AnnualCashFlowSummary & {
+  portfolioDistributions: number;
+};
+
+interface AnnualCoverageTooltipProps {
+  active?: boolean;
+  label?: string | number;
+  payload?: Array<{
+    dataKey?: string | number;
+    name?: string | number;
+    value?: number | string;
+    payload?: AnnualCoverageRow;
+  }>;
+}
+
 const INITIAL_STATUS = "No workbook loaded. Upload an Income Ladder workbook to generate a client snapshot.";
+const ANNUAL_DISPLAY_YEAR_LIMIT = 10;
+const PORTFOLIO_DISTRIBUTION_COLOR = "#d97706";
 
 function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -44,10 +70,13 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
 
   const reportDateLabel = useMemo(() => formatDateLabel(metadata.reportDate), [metadata.reportDate]);
-  const insights = useMemo(() => (report ? getInsights(report) : null), [report]);
+  const annualDisplayRows = useMemo(() => getAnnualDisplayRows(report?.annualSummary ?? []), [report]);
+  const monthlyDisplayRows = useMemo(() => getMonthlyDisplayRows(report?.monthlyRows ?? [], annualDisplayRows), [report, annualDisplayRows]);
+  const displayMetrics = useMemo(() => getDisplayMetrics(annualDisplayRows, monthlyDisplayRows), [annualDisplayRows, monthlyDisplayRows]);
   const previewMaturities = useMemo(() => getUpcomingMaturities(report?.maturityEvents ?? [], 10), [report]);
   const printMaturities = useMemo(() => getUpcomingMaturities(report?.maturityEvents ?? [], 6), [report]);
-  const printAnnualRows = useMemo(() => report?.annualSummary.slice(0, 10) ?? [], [report]);
+  const displayPeriod = useMemo(() => (report ? formatDisplayPeriod(report, annualDisplayRows) : "Not available"), [report, annualDisplayRows]);
+  const insights = useMemo(() => (report ? getInsights(annualDisplayRows, displayMetrics, displayPeriod) : null), [report, annualDisplayRows, displayMetrics, displayPeriod]);
 
   async function handleWorkbookUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -179,7 +208,9 @@ function App() {
             maturities={printMaturities}
             report={report}
             reportDateLabel={reportDateLabel}
-            annualRows={printAnnualRows}
+            displayPeriod={displayPeriod}
+            displayMetrics={displayMetrics}
+            annualRows={annualDisplayRows}
           />
         ) : null}
 
@@ -191,20 +222,20 @@ function App() {
 
           {!isLoading && report && insights ? (
             <section className="flex min-w-0 flex-col gap-4">
-              <WorkbookSummary metadata={metadata} report={report} reportDateLabel={reportDateLabel} />
+              <WorkbookSummary metadata={metadata} report={report} reportDateLabel={reportDateLabel} displayPeriod={displayPeriod} />
 
               <section className="kpi-grid grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                <KpiCard label="Total Spending Goal" value={report.metrics.totalSpendingGoal} icon={CalendarDays} caption={formatPeriod(report)} />
-                <KpiCard label="Total Net Income" value={report.metrics.totalNetIncome} icon={Landmark} caption="Modeled income over period" />
-                <KpiCard label="IRA Distributions" value={report.metrics.totalIraDistributions} icon={FileSpreadsheet} caption="Total modeled IRA distributions" />
-                <KpiCard label="CMA Withdrawals" value={report.metrics.totalCmaWithdrawals} icon={Upload} caption="Total modeled CMA withdrawals" />
-                <KpiCard label="Total Surplus / Deficit" value={report.metrics.totalSurplusDeficit} icon={TrendingUp} signed caption="Aggregate cash-flow result" />
-                <KpiCard label="First Shortfall Month" value={report.metrics.firstShortfallMonth ?? "None found"} icon={TrendingDown} caption={`${report.metrics.shortfallMonthCount} shortfall months`} />
+                <KpiCard label="Total Spending Goal" value={displayMetrics.totalSpendingGoal} icon={CalendarDays} caption={displayPeriod} />
+                <KpiCard label="Total Net Income" value={displayMetrics.totalNetIncome} icon={Landmark} caption="Modeled income over period" />
+                <KpiCard label="IRA Distributions" value={displayMetrics.totalIraDistributions} icon={FileSpreadsheet} caption="Total modeled IRA distributions" />
+                <KpiCard label="CMA Withdrawals" value={displayMetrics.totalCmaWithdrawals} icon={Upload} caption="Total modeled CMA withdrawals" />
+                <KpiCard label="Total Surplus / Deficit" value={displayMetrics.totalSurplusDeficit} icon={TrendingUp} signed caption="Aggregate cash-flow result" />
+                <KpiCard label="First Shortfall Month" value={displayMetrics.firstShortfallMonth ?? "None found"} icon={TrendingDown} caption={`${displayMetrics.shortfallMonthCount} shortfall months`} />
               </section>
 
               <section className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.55fr)]">
-                <AnnualCoverageChart annualSummary={report.annualSummary} />
-                <AnnualSurplusPanel annualSummary={report.annualSummary} />
+                <AnnualCoverageChart annualSummary={annualDisplayRows} />
+                <AnnualSurplusPanel annualSummary={annualDisplayRows} />
               </section>
 
               <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -229,7 +260,17 @@ function App() {
   );
 }
 
-function WorkbookSummary({ metadata, report, reportDateLabel }: { metadata: ReportMetadata; report: IncomeLadderReport; reportDateLabel: string }) {
+function WorkbookSummary({
+  displayPeriod,
+  metadata,
+  report,
+  reportDateLabel,
+}: {
+  displayPeriod: string;
+  metadata: ReportMetadata;
+  report: IncomeLadderReport;
+  reportDateLabel: string;
+}) {
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -244,19 +285,19 @@ function WorkbookSummary({ metadata, report, reportDateLabel }: { metadata: Repo
           <ReportMetaItem label="Prepared by" value={metadata.preparedBy || "Not specified"} />
           <ReportMetaItem label="Report date" value={reportDateLabel} />
           <ReportMetaItem label="Rows parsed" value={String(report.rowsParsed)} />
-          <ReportMetaItem label="Period" value={formatPeriod(report)} />
+          <ReportMetaItem label="Period" value={displayPeriod} />
         </div>
       </div>
     </section>
   );
 }
 
-function AnnualCoverageChart({ annualSummary }: { annualSummary: AnnualCashFlowSummary[] }) {
+function AnnualCoverageChart({ annualSummary }: { annualSummary: AnnualCoverageRow[] }) {
   return (
     <article className="chart-card min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-slate-950">Annual cash-flow coverage</h2>
-        <p className="text-sm text-slate-500">Spending goal compared with modeled income, distributions, and withdrawals.</p>
+        <p className="text-sm text-slate-500">Spending goal compared with modeled income and portfolio distributions.</p>
       </div>
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
@@ -264,16 +305,51 @@ function AnnualCoverageChart({ annualSummary }: { annualSummary: AnnualCashFlowS
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
             <XAxis dataKey="year" tickLine={false} axisLine={false} tick={{ fill: "#64748b", fontSize: 12 }} />
             <YAxis tickLine={false} axisLine={false} tick={{ fill: "#64748b", fontSize: 12 }} tickFormatter={(value) => `$${Math.round(Number(value) / 1000)}k`} />
-            <Tooltip formatter={(value) => formatCurrency(Number(value))} cursor={{ fill: "#f8fafc" }} />
+            <Tooltip content={<AnnualCoverageTooltip />} cursor={{ fill: "#f8fafc" }} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             <Bar dataKey="spendingGoal" name="Spending Goal" fill="#0f766e" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="totalNetIncome" name="Total Net Income" fill="#2563eb" radius={[4, 4, 0, 0]} />
-            <Line dataKey="iraDistributions" name="IRA Distributions" stroke="#7c3aed" strokeWidth={2.5} dot={false} />
-            <Line dataKey="cmaWithdrawals" name="CMA Withdrawals" stroke="#f59e0b" strokeWidth={2.5} dot={false} />
+            <Bar dataKey="totalNetIncome" name="Net Income" stackId="funding" fill="#2563eb" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="portfolioDistributions" name="Portfolio Distributions" stackId="funding" fill={PORTFOLIO_DISTRIBUTION_COLOR} radius={[4, 4, 0, 0]} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
     </article>
+  );
+}
+
+function AnnualCoverageTooltip({ active, label, payload }: AnnualCoverageTooltipProps) {
+  if (!active || !payload?.length) {
+    return null;
+  }
+
+  const row = payload.find((item) => item.payload)?.payload;
+
+  if (!row) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-lg">
+      <p className="font-semibold text-slate-950">{label}</p>
+      <div className="mt-2 space-y-1 text-slate-600">
+        <TooltipLine label="Spending Goal" value={row.spendingGoal} />
+        <TooltipLine label="Net Income" value={row.totalNetIncome} />
+        <TooltipLine label="Portfolio Distributions" value={row.portfolioDistributions} emphasized />
+        <div className="space-y-0.5 border-l-2 border-slate-200 pl-3 text-xs">
+          <TooltipLine label="IRA" value={row.iraDistributions} />
+          <TooltipLine label="CMA" value={row.cmaWithdrawals} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TooltipLine({ emphasized = false, label, value }: { emphasized?: boolean; label: string; value: number }) {
+  return (
+    <div className={`flex min-w-56 items-center justify-between gap-5 ${emphasized ? "font-semibold text-slate-950" : ""}`}>
+      <span>{label}</span>
+      <span>{formatCurrency(value)}</span>
+    </div>
   );
 }
 
@@ -361,6 +437,8 @@ function InsightPanel({ insights }: { insights: ReturnType<typeof getInsights> }
 function CompactPrintReport({
   advisorNotes,
   annualRows,
+  displayPeriod,
+  displayMetrics,
   insights,
   maturities,
   metadata,
@@ -369,6 +447,8 @@ function CompactPrintReport({
 }: {
   advisorNotes: string;
   annualRows: AnnualCashFlowSummary[];
+  displayPeriod: string;
+  displayMetrics: DisplayMetrics;
   insights: ReturnType<typeof getInsights>;
   maturities: MaturityEvent[];
   metadata: ReportMetadata;
@@ -401,7 +481,7 @@ function CompactPrintReport({
           </div>
           <div>
             <dt>Period</dt>
-            <dd>{formatPeriod(report)}</dd>
+            <dd>{displayPeriod}</dd>
           </div>
           <div>
             <dt>Rows parsed</dt>
@@ -411,17 +491,17 @@ function CompactPrintReport({
       </header>
 
       <section className="compact-print-grid print-block">
-        <CompactPrintKpi label="Total Spending Goal" value={formatCurrency(report.metrics.totalSpendingGoal)} />
-        <CompactPrintKpi label="Total Net Income" value={formatCurrency(report.metrics.totalNetIncome)} />
-        <CompactPrintKpi label="IRA Distributions" value={formatCurrency(report.metrics.totalIraDistributions)} />
-        <CompactPrintKpi label="CMA Withdrawals" value={formatCurrency(report.metrics.totalCmaWithdrawals)} />
-        <CompactPrintKpi label="Total Surplus / Deficit" value={formatSignedCurrency(report.metrics.totalSurplusDeficit)} />
+        <CompactPrintKpi label="Total Spending Goal" value={formatCurrency(displayMetrics.totalSpendingGoal)} />
+        <CompactPrintKpi label="Total Net Income" value={formatCurrency(displayMetrics.totalNetIncome)} />
+        <CompactPrintKpi label="IRA Distributions" value={formatCurrency(displayMetrics.totalIraDistributions)} />
+        <CompactPrintKpi label="CMA Withdrawals" value={formatCurrency(displayMetrics.totalCmaWithdrawals)} />
+        <CompactPrintKpi label="Total Surplus / Deficit" value={formatSignedCurrency(displayMetrics.totalSurplusDeficit)} />
       </section>
 
       <section className="compact-print-two-column print-block">
         <article className="compact-print-card compact-print-chart-card print-block">
           <h2>Annual cash-flow coverage</h2>
-          <CompactPrintCoverageChart data={annualRows.slice(0, 8)} />
+          <CompactPrintCoverageChart data={annualRows} />
         </article>
 
         <article className="compact-print-card print-block">
@@ -526,39 +606,80 @@ function CompactMaturityList({ maturities }: { maturities: MaturityEvent[] }) {
 }
 
 function CompactPrintCoverageChart({ data }: { data: AnnualCashFlowSummary[] }) {
-  const maxValue = Math.max(...data.flatMap((item) => [item.spendingGoal, item.totalNetIncome]), 1);
-  const rowHeight = 24;
+  const totals = {
+    spendingGoal: sumAnnualRows(data, "spendingGoal"),
+    totalNetIncome: sumAnnualRows(data, "totalNetIncome"),
+    iraDistributions: sumAnnualRows(data, "iraDistributions"),
+    cmaWithdrawals: sumAnnualRows(data, "cmaWithdrawals"),
+  };
+  const totalPortfolioDistributions = totals.iraDistributions + totals.cmaWithdrawals;
+  const activeLegendItems = [
+    totals.spendingGoal > 0 ? { label: "SPENDING GOAL", color: "#0f766e" } : null,
+    totals.totalNetIncome > 0 ? { label: "NET INCOME", color: "#2563eb" } : null,
+    totalPortfolioDistributions > 0 ? { label: "PORTFOLIO DISTRIBUTIONS", color: PORTFOLIO_DISTRIBUTION_COLOR } : null,
+  ].filter((item): item is { label: string; color: string } => Boolean(item));
+
+  const rowHeight = 26;
   const chartWidth = 560;
-  const labelWidth = 54;
-  const valueWidth = 74;
-  const plotWidth = chartWidth - labelWidth - valueWidth - 18;
-  const chartHeight = 30 + data.length * rowHeight;
+  const yearLabelWidth = 54;
+  const valueLabelWidth = 84;
+  const valueLabelGap = 14;
+  const drawableBarWidth = chartWidth - yearLabelWidth - valueLabelWidth - valueLabelGap;
+  const legendY = 14;
+  const legendItemSwatchWidth = 16;
+  const legendItemTextGap = 6;
+  const legendLeftX = yearLabelWidth;
+  const legendRightX = chartWidth - valueLabelWidth;
+  const legendRowHeight = 13;
+  const legendRows = activeLegendItems.length > 3 ? 2 : 1;
+  const legendItemsPerRow = Math.ceil(activeLegendItems.length / legendRows);
+  const firstRowY = legendRows > 1 ? 52 : 38;
+  const chartHeight = firstRowY + 6 + data.length * rowHeight;
+  const maxChartValue = Math.max(
+    ...data.flatMap((item) => [item.spendingGoal, item.totalNetIncome + item.iraDistributions + item.cmaWithdrawals]),
+    1,
+  );
 
   return (
     <svg className="compact-print-chart" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label="Annual cash-flow coverage">
-      <text x={chartWidth - 215} y="14" fill="#475569" fontSize="10" fontWeight="800">
-        SPENDING
-      </text>
-      <rect x={chartWidth - 238} y="5" width="16" height="8" rx="4" fill="#0f766e" />
-      <text x={chartWidth - 82} y="14" fill="#475569" fontSize="10" fontWeight="800">
-        INCOME
-      </text>
-      <rect x={chartWidth - 106} y="5" width="16" height="8" rx="4" fill="#2563eb" />
+      {activeLegendItems.map((item, index) => {
+        const rowIndex = Math.floor(index / legendItemsPerRow);
+        const rowItemIndex = index % legendItemsPerRow;
+        const rowStartIndex = rowIndex * legendItemsPerRow;
+        const rowItemCount = Math.min(legendItemsPerRow, activeLegendItems.length - rowStartIndex);
+        const legendSlotWidth = (legendRightX - legendLeftX) / rowItemCount;
+        const estimatedItemWidth = legendItemSwatchWidth + legendItemTextGap + item.label.length * 4.8;
+        const itemCenterX = legendLeftX + legendSlotWidth * rowItemIndex + legendSlotWidth / 2;
+        const itemX = Math.max(0, itemCenterX - estimatedItemWidth / 2);
+        const itemY = 6 + rowIndex * legendRowHeight;
+
+        return (
+          <g key={item.label}>
+            <rect x={itemX} y={itemY} width={legendItemSwatchWidth} height="8" rx="4" fill={item.color} />
+            <text x={itemX + legendItemSwatchWidth + legendItemTextGap} y={legendY + rowIndex * legendRowHeight} fill="#475569" fontSize="8.5" fontWeight="800">
+              {item.label}
+            </text>
+          </g>
+        );
+      })}
       {data.map((item, index) => {
-        const y = 27 + index * rowHeight;
-        const spendingWidth = Math.max((item.spendingGoal / maxValue) * plotWidth, 4);
-        const incomeWidth = Math.max((item.totalNetIncome / maxValue) * plotWidth, 4);
+        const y = firstRowY + index * rowHeight;
+        const spendingWidth = Math.max((item.spendingGoal / maxChartValue) * drawableBarWidth, 4);
+        const incomeWidth = Math.max((item.totalNetIncome / maxChartValue) * drawableBarWidth, 4);
+        const portfolioDistributions = item.iraDistributions + item.cmaWithdrawals;
+        const distributionWidth = portfolioDistributions > 0 ? Math.max((portfolioDistributions / maxChartValue) * drawableBarWidth, 4) : 0;
 
         return (
           <g key={item.year}>
-            {index > 0 ? <line x1="0" x2={chartWidth} y1={y - 8} y2={y - 8} stroke="#e2e8f0" strokeWidth="1" /> : null}
+            {index > 0 ? <line x1="0" x2={chartWidth} y1={y - 4} y2={y - 4} stroke="#e2e8f0" strokeWidth="1" /> : null}
             <text x="0" y={y + 7} fill="#334155" fontSize="10" fontWeight="700">
               {item.year}
             </text>
-            <rect x={labelWidth} y={y - 1} width={plotWidth} height="7" rx="3.5" fill="#e2e8f0" />
-            <rect x={labelWidth} y={y - 1} width={spendingWidth} height="7" rx="3.5" fill="#0f766e" />
-            <rect x={labelWidth} y={y + 10} width={plotWidth} height="7" rx="3.5" fill="#e2e8f0" />
-            <rect x={labelWidth} y={y + 10} width={incomeWidth} height="7" rx="3.5" fill="#2563eb" />
+            <rect x={yearLabelWidth} y={y - 1} width={drawableBarWidth} height="7" rx="3.5" fill="#e2e8f0" />
+            <rect x={yearLabelWidth} y={y - 1} width={spendingWidth} height="7" rx="3.5" fill="#0f766e" />
+            <rect x={yearLabelWidth} y={y + 10} width={drawableBarWidth} height="7" rx="3.5" fill="#e2e8f0" />
+            <rect x={yearLabelWidth} y={y + 10} width={incomeWidth} height="7" rx="3.5" fill="#2563eb" />
+            {distributionWidth > 0 ? <rect x={yearLabelWidth + incomeWidth} y={y + 10} width={distributionWidth} height="7" rx="3.5" fill={PORTFOLIO_DISTRIBUTION_COLOR} /> : null}
             <text x={chartWidth} y={y + 7} fill="#020617" fontSize="10" fontWeight="800" textAnchor="end">
               {formatSignedCurrency(item.surplusDeficit)}
             </text>
@@ -700,19 +821,17 @@ function Insight({ label, value }: { label: string; value: string }) {
   );
 }
 
-function getInsights(report: IncomeLadderReport) {
-  const largestAnnualShortfall = report.annualSummary.reduce<AnnualCashFlowSummary | null>(
+function getInsights(annualRows: AnnualCashFlowSummary[], displayMetrics: DisplayMetrics, displayPeriod: string) {
+  const largestAnnualShortfall = annualRows.reduce<AnnualCashFlowSummary | null>(
     (largest, row) => (row.surplusDeficit < 0 && (!largest || row.surplusDeficit < largest.surplusDeficit) ? row : largest),
     null,
   );
-  const totalDistributionWithdrawals = report.metrics.totalIraDistributions + report.metrics.totalCmaWithdrawals;
-
   return {
-    reportPeriod: formatPeriod(report),
-    firstShortfallMonth: report.metrics.firstShortfallMonth ?? "None found",
-    shortfallMonthCount: `${report.metrics.shortfallMonthCount} month${report.metrics.shortfallMonthCount === 1 ? "" : "s"}`,
+    reportPeriod: displayPeriod,
+    firstShortfallMonth: displayMetrics.firstShortfallMonth ?? "None found",
+    shortfallMonthCount: `${displayMetrics.shortfallMonthCount} month${displayMetrics.shortfallMonthCount === 1 ? "" : "s"}`,
     largestAnnualShortfall: largestAnnualShortfall ? `${largestAnnualShortfall.year}: ${formatSignedCurrency(largestAnnualShortfall.surplusDeficit)}` : "None found",
-    totalDistributionWithdrawals: formatCurrency(totalDistributionWithdrawals),
+    totalDistributionWithdrawals: formatCurrency(displayMetrics.totalPortfolioDistributions),
   };
 }
 
@@ -721,6 +840,51 @@ function getUpcomingMaturities(events: MaturityEvent[], limit: number) {
   const source = withMaturingAmount.length > 0 ? withMaturingAmount : events;
 
   return source.slice(0, limit);
+}
+
+function getAnnualDisplayRows(rows: AnnualCashFlowSummary[]): AnnualCoverageRow[] {
+  return rows.slice(0, ANNUAL_DISPLAY_YEAR_LIMIT).map((row) => ({
+    ...row,
+    portfolioDistributions: row.iraDistributions + row.cmaWithdrawals,
+  }));
+}
+
+function getMonthlyDisplayRows(rows: MonthlyCashFlowRow[], annualRows: AnnualCashFlowSummary[]) {
+  const displayYears = new Set(annualRows.map((row) => row.year));
+  return rows.filter((row) => displayYears.has(row.year));
+}
+
+function getDisplayMetrics(annualRows: AnnualCashFlowSummary[], monthlyRows: MonthlyCashFlowRow[]): DisplayMetrics {
+  const firstShortfall = monthlyRows.find((row) => row.surplusDeficit < 0);
+
+  const totalIraDistributions = sumAnnualRows(annualRows, "iraDistributions");
+  const totalCmaWithdrawals = sumAnnualRows(annualRows, "cmaWithdrawals");
+
+  return {
+    totalSpendingGoal: sumAnnualRows(annualRows, "spendingGoal"),
+    totalNetIncome: sumAnnualRows(annualRows, "totalNetIncome"),
+    totalIraDistributions,
+    totalCmaWithdrawals,
+    totalPortfolioDistributions: totalIraDistributions + totalCmaWithdrawals,
+    totalSurplusDeficit: sumAnnualRows(annualRows, "surplusDeficit"),
+    firstShortfallMonth: firstShortfall?.label,
+    shortfallMonthCount: monthlyRows.filter((row) => row.surplusDeficit < 0).length,
+  };
+}
+
+function sumAnnualRows(rows: AnnualCashFlowSummary[], key: keyof Omit<AnnualCashFlowSummary, "year">) {
+  return rows.reduce((total, row) => total + row[key], 0);
+}
+
+function formatDisplayPeriod(report: IncomeLadderReport, annualRows: AnnualCashFlowSummary[]) {
+  const first = annualRows[0]?.year;
+  const last = annualRows[annualRows.length - 1]?.year;
+
+  if (first && last) {
+    return first === last ? String(first) : `${first} to ${last}`;
+  }
+
+  return formatPeriod(report);
 }
 
 function formatPeriod(report: IncomeLadderReport) {

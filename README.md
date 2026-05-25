@@ -67,9 +67,7 @@ Before pushing, run:
 npm run build:pages
 ```
 
-That command builds the Vite app, syncs the latest built bundle into root `assets/`, and updates the GitHub Pages fallback in `index.html` so the `main` branch can serve the app directly.
-
-The old `gh-pages` branch deploy command is still available as `npm run deploy:gh-pages` if it is ever needed again.
+That command builds the Vite app, syncs the latest built bundle into root `assets/`, and updates the GitHub Pages fallback in `index.html` so the `main` branch can serve the app directly. This repo no longer uses a `gh-pages` branch.
 
 ## Privacy
 

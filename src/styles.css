@@ -237,7 +237,7 @@ textarea {
   .compact-print-chart {
     display: block;
     height: auto;
-    max-height: 2.1in;
+    max-height: 2.65in;
     overflow: hidden;
     width: 100%;
   }
