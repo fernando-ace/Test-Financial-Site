@@ -78,6 +78,73 @@ textarea {
   }
 }
 
+.monthly-ledger-table thead th {
+  position: sticky;
+  top: 0;
+}
+
+.monthly-ledger-table thead tr:nth-child(2) th {
+  top: 42px;
+}
+
+.monthly-ledger-table {
+  font-variant-numeric: tabular-nums;
+  table-layout: fixed;
+}
+
+.monthly-ledger-table th,
+.monthly-ledger-table td {
+  padding-left: 0.45rem;
+  padding-right: 0.45rem;
+  word-break: normal;
+}
+
+.monthly-ledger-table th {
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: clip;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.monthly-ledger-table thead tr:first-child th {
+  height: 2.45rem;
+}
+
+.monthly-ledger-table thead tr:nth-child(2) th {
+  height: 2rem;
+}
+
+@media (min-width: 768px) and (max-width: 1279px) {
+  .monthly-ledger-table {
+    font-size: 0.64rem;
+  }
+
+  .monthly-ledger-table th,
+  .monthly-ledger-table td {
+    padding-left: 0.22rem;
+    padding-right: 0.22rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  .monthly-ledger-table {
+    font-size: 0.72rem;
+  }
+
+  .monthly-ledger-table th,
+  .monthly-ledger-table td {
+    padding-left: 0.35rem;
+    padding-right: 0.35rem;
+  }
+}
+
+@media (min-width: 1536px) {
+  .monthly-ledger-table {
+    font-size: 0.78rem;
+  }
+}
+
 @page {
   size: Letter;
   margin: 0.45in;
@@ -305,13 +372,56 @@ textarea {
     margin-top: 0.07in;
   }
 
+  .compact-print-ledger-flow {
+    break-before: page;
+    page-break-before: always;
+  }
+
   .compact-print-notes {
-    margin-top: 0.12in;
+    margin-bottom: 0.12in;
   }
 
   .compact-print-notes p {
     margin: 0;
     white-space: pre-wrap;
+  }
+
+  .compact-print-ledger-section {
+    margin-top: 0;
+    overflow: visible;
+  }
+
+  .compact-print-ledger-table {
+    font-size: 5.8pt;
+    line-height: 1.2;
+  }
+
+  .compact-print-ledger-table thead {
+    display: table-header-group;
+  }
+
+  .compact-print-ledger-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .compact-print-ledger-table th,
+  .compact-print-ledger-table td {
+    padding: 0.027in;
+  }
+
+  .compact-print-year-row td {
+    background: #334155 !important;
+    color: #ffffff !important;
+    font-size: 6.5pt;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .compact-print-shortfall-row td {
+    background: #fff1f2 !important;
+    color: #881337 !important;
   }
 
   .compact-empty {

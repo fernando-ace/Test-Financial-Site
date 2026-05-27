@@ -9,6 +9,16 @@ export interface MonthlyCashFlowRow {
   cmaWithdrawals: number;
   iraDistributions: number;
   surplusDeficit: number;
+  client1Ira: MonthlyAccountDetail;
+  client2Ira: MonthlyAccountDetail;
+  cma: MonthlyAccountDetail;
+}
+
+export interface MonthlyAccountDetail {
+  maturingAmount?: number;
+  cashBalance?: number;
+  netDistribution?: number;
+  withdrawal?: number;
 }
 
 export interface AnnualCashFlowSummary {
@@ -124,6 +134,21 @@ function extractMonthlyRows(sheet: XLSX.WorkSheet, lastRow: number): MonthlyCash
       iraDistributions: parseNumber(getCellValue(sheet, rowIndex, 6)),
       surplusDeficit: parseNumber(getCellValue(sheet, rowIndex, 7)),
     };
+    const client1Ira = {
+      maturingAmount: parseNumber(getCellValue(sheet, rowIndex, 11)),
+      cashBalance: parseNumber(getCellValue(sheet, rowIndex, 12)),
+      netDistribution: parseNumber(getCellValue(sheet, rowIndex, 13)),
+    };
+    const client2Ira = {
+      maturingAmount: parseNumber(getCellValue(sheet, rowIndex, 15)),
+      cashBalance: parseNumber(getCellValue(sheet, rowIndex, 16)),
+      netDistribution: parseNumber(getCellValue(sheet, rowIndex, 17)),
+    };
+    const cma = {
+      maturingAmount: parseNumber(getCellValue(sheet, rowIndex, 19)),
+      cashBalance: parseNumber(getCellValue(sheet, rowIndex, 20)),
+      withdrawal: parseNumber(getCellValue(sheet, rowIndex, 21)),
+    };
 
     if (!hasAnyNumber(values)) {
       continue;
@@ -138,10 +163,27 @@ function extractMonthlyRows(sheet: XLSX.WorkSheet, lastRow: number): MonthlyCash
       cmaWithdrawals: values.cmaWithdrawals ?? 0,
       iraDistributions: values.iraDistributions ?? 0,
       surplusDeficit: values.surplusDeficit ?? 0,
+      client1Ira: compactAccountDetail(client1Ira),
+      client2Ira: compactAccountDetail(client2Ira),
+      cma: compactAccountDetail(cma),
     });
   }
 
   return rows;
+}
+
+function compactAccountDetail(values: {
+  maturingAmount: number | null;
+  cashBalance: number | null;
+  netDistribution?: number | null;
+  withdrawal?: number | null;
+}): MonthlyAccountDetail {
+  return {
+    maturingAmount: values.maturingAmount ?? undefined,
+    cashBalance: values.cashBalance ?? undefined,
+    netDistribution: values.netDistribution ?? undefined,
+    withdrawal: values.withdrawal ?? undefined,
+  };
 }
 
 function extractMaturityEvents(sheet: XLSX.WorkSheet, monthlyRows: MonthlyCashFlowRow[], lastRow: number): MaturityEvent[] {
