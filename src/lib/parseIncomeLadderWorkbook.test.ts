@@ -56,6 +56,55 @@ function createSyntheticWorkbook(): ArrayBuffer {
   return XLSX.write(workbook, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
 }
 
+function createBoundaryWorkbook(): ArrayBuffer {
+  const rows: unknown[][] = Array.from({ length: 140 }, () => []);
+  rows[8] = [];
+
+  const start = new Date(2027, 0, 1);
+  for (let index = 0; index < 120; index += 1) {
+    const date = new Date(start.getFullYear(), start.getMonth() + index, 1);
+    const rowIndex = 9 + index;
+    const row = [];
+    row[2] = date;
+    row[11] = 0;
+    row[12] = 1000 - index;
+    row[13] = 100;
+    row[15] = 0;
+    row[16] = 2000 - index;
+    row[17] = 100;
+    row[19] = 0;
+    row[20] = 0;
+    row[21] = 0;
+
+    if (date.getFullYear() < 2035 || (date.getFullYear() === 2035 && date.getMonth() === 0)) {
+      row[3] = 1000;
+      row[4] = 500;
+      row[5] = 0;
+      row[6] = 500;
+      row[7] = 0;
+    }
+
+    rows[rowIndex] = row;
+  }
+
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet(rows);
+
+  for (let rowIndex = 106; rowIndex < 129; rowIndex += 1) {
+    [3, 4, 5, 6, 7].forEach((columnIndex) => {
+      sheet[XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex })] = {
+        t: "n",
+        v: 999,
+        f: "[1]Data!A1",
+        w: "$999",
+      };
+    });
+  }
+
+  XLSX.utils.book_append_sheet(workbook, sheet, "Sheet1");
+  return XLSX.write(workbook, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
+}
+
 describe("parseIncomeLadderWorkbookFromArrayBuffer", () => {
   const report = parseIncomeLadderWorkbookFromArrayBuffer(createSyntheticWorkbook(), "synthetic-income-ladder.xlsx");
 
@@ -129,6 +178,27 @@ describe("parseIncomeLadderWorkbookFromArrayBuffer", () => {
     const appSource = readFileSync("src/App.tsx", "utf8");
     expect(appSource).toContain("Displayed months");
     expect(appSource).not.toContain("Cash-flow rows");
+  });
+
+  it("stops at the last workbook-backed month and excludes external formula rows", () => {
+    const boundaryReport = parseIncomeLadderWorkbookFromArrayBuffer(createBoundaryWorkbook(), "synthetic-boundary.xlsx");
+
+    expect(boundaryReport.monthlyRows[0].label).toBe("Jan 2027");
+    expect(boundaryReport.monthlyRows.at(-1)?.label).toBe("Jan 2035");
+    expect(boundaryReport.rowsParsed).toBe(97);
+    expect(boundaryReport.sourceMonthlyRowCount).toBe(120);
+    expect(boundaryReport.excludedMonthlyRowCount).toBe(23);
+    expect(boundaryReport.dataBoundary).toEqual(
+      expect.objectContaining({
+        lastValidMonth: "Jan 2035",
+        firstExcludedMonth: "Feb 2035",
+      }),
+    );
+    expect(boundaryReport.monthlyRows.some((row) => row.year === 2036)).toBe(false);
+    expect(boundaryReport.annualSummary.some((row) => row.year === 2036)).toBe(false);
+    expect(boundaryReport.annualSummary.at(-1)).toEqual(expect.objectContaining({ year: 2035, monthsIncluded: 1 }));
+    expect(boundaryReport.metrics.lastMonth).toBe("2035-01");
+    expect(boundaryReport.metrics.totalSpendingGoal).toBe(97000);
   });
 
   it("does not track real workbook or generated PDF artifacts", () => {

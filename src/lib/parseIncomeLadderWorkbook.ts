@@ -24,6 +24,7 @@ export interface MonthlyAccountDetail {
 
 export interface AnnualCashFlowSummary {
   year: number;
+  monthsIncluded: number;
   spendingGoal: number;
   totalNetIncome: number;
   cmaWithdrawals: number;
@@ -45,6 +46,13 @@ export interface IncomeLadderReport {
   workbookName: string;
   sheetName: string;
   rowsParsed: number;
+  sourceMonthlyRowCount: number;
+  excludedMonthlyRowCount: number;
+  dataBoundary?: {
+    lastValidMonth?: string;
+    firstExcludedMonth?: string;
+    reason: string;
+  };
   monthlyRows: MonthlyCashFlowRow[];
   annualSummary: AnnualCashFlowSummary[];
   maturityEvents: MaturityEvent[];
@@ -82,6 +90,7 @@ export interface IncomeLadderReport {
 type SafeCellValue = string | number | boolean | Date | null;
 
 const ERROR_VALUES = new Set(["#NAME?", "#REF!", "#VALUE!", "#DIV/0!", "#N/A", "#NULL!", "#NUM!", "#GETTING_DATA"]);
+const REQUIRED_MONTHLY_VALUE_COLUMNS = [3, 4, 5, 6, 7] as const;
 
 export async function parseIncomeLadderWorkbookFromUrl(url: string): Promise<IncomeLadderReport> {
   const response = await fetch(url, { cache: "no-store" });
@@ -98,7 +107,7 @@ export function parseIncomeLadderWorkbookFromArrayBuffer(buffer: ArrayBuffer, wo
   const workbook = XLSX.read(buffer, {
     type: "array",
     cellDates: true,
-    cellFormula: false,
+    cellFormula: true,
     cellNF: false,
     cellStyles: false,
   });
@@ -111,7 +120,8 @@ export function parseIncomeLadderWorkbookFromArrayBuffer(buffer: ArrayBuffer, wo
 
   const range = XLSX.utils.decode_range(sheet["!ref"] ?? "A1:AC346");
   const lastRow = Math.max(range.e.r, 345);
-  const monthlyRows = extractMonthlyRows(sheet, lastRow);
+  const monthlyExtraction = extractMonthlyRows(sheet, lastRow);
+  const monthlyRows = monthlyExtraction.rows;
   const annualSummary = summarizeAnnualRows(monthlyRows);
   const maturityEvents = extractMaturityEvents(sheet, monthlyRows, lastRow);
   const beginningValues = extractBeginningValues(sheet);
@@ -121,6 +131,9 @@ export function parseIncomeLadderWorkbookFromArrayBuffer(buffer: ArrayBuffer, wo
     workbookName,
     sheetName,
     rowsParsed: monthlyRows.length,
+    sourceMonthlyRowCount: monthlyExtraction.sourceMonthlyRowCount,
+    excludedMonthlyRowCount: monthlyExtraction.excludedMonthlyRowCount,
+    dataBoundary: monthlyExtraction.dataBoundary,
     monthlyRows,
     annualSummary,
     maturityEvents,
@@ -129,13 +142,41 @@ export function parseIncomeLadderWorkbookFromArrayBuffer(buffer: ArrayBuffer, wo
   };
 }
 
-function extractMonthlyRows(sheet: XLSX.WorkSheet, lastRow: number): MonthlyCashFlowRow[] {
+interface MonthlyRowsExtraction {
+  rows: MonthlyCashFlowRow[];
+  sourceMonthlyRowCount: number;
+  excludedMonthlyRowCount: number;
+  dataBoundary?: IncomeLadderReport["dataBoundary"];
+}
+
+function extractMonthlyRows(sheet: XLSX.WorkSheet, lastRow: number): MonthlyRowsExtraction {
   const rows: MonthlyCashFlowRow[] = [];
+  let sourceMonthlyRowCount = 0;
+  let excludedMonthlyRowCount = 0;
+  let dataBoundary: IncomeLadderReport["dataBoundary"];
 
   for (let rowIndex = 9; rowIndex <= lastRow; rowIndex += 1) {
     const monthInfo = parseMonth(getCellValue(sheet, rowIndex, 2));
 
     if (!monthInfo) {
+      continue;
+    }
+
+    sourceMonthlyRowCount += 1;
+
+    const rowValidity = getMonthlyRowValidity(sheet, rowIndex);
+    if (!rowValidity.isValid) {
+      if (rows.length > 0) {
+        excludedMonthlyRowCount = countRemainingMonthlyRows(sheet, rowIndex, lastRow);
+        sourceMonthlyRowCount += Math.max(excludedMonthlyRowCount - 1, 0);
+        dataBoundary = {
+          lastValidMonth: rows[rows.length - 1]?.label,
+          firstExcludedMonth: monthInfo.label,
+          reason: rowValidity.reason ?? "Later workbook rows were excluded because they are not valid monthly ladder rows.",
+        };
+        break;
+      }
+
       continue;
     }
 
@@ -169,6 +210,17 @@ function extractMonthlyRows(sheet: XLSX.WorkSheet, lastRow: number): MonthlyCash
     };
 
     if (!hasAnyNumber(values)) {
+      if (rows.length > 0) {
+        excludedMonthlyRowCount = countRemainingMonthlyRows(sheet, rowIndex, lastRow);
+        sourceMonthlyRowCount += Math.max(excludedMonthlyRowCount - 1, 0);
+        dataBoundary = {
+          lastValidMonth: rows[rows.length - 1]?.label,
+          firstExcludedMonth: monthInfo.label,
+          reason: "Later workbook rows contain zero or blank financial values and were excluded.",
+        };
+        break;
+      }
+
       continue;
     }
 
@@ -188,7 +240,44 @@ function extractMonthlyRows(sheet: XLSX.WorkSheet, lastRow: number): MonthlyCash
     });
   }
 
-  return rows;
+  return {
+    rows,
+    sourceMonthlyRowCount,
+    excludedMonthlyRowCount,
+    dataBoundary,
+  };
+}
+
+function getMonthlyRowValidity(sheet: XLSX.WorkSheet, rowIndex: number) {
+  for (const columnIndex of REQUIRED_MONTHLY_VALUE_COLUMNS) {
+    const cell = getCellInfo(sheet, rowIndex, columnIndex);
+
+    if (cell.hasError) {
+      return { isValid: false, reason: "Later workbook rows contain formula errors and were excluded." };
+    }
+
+    if (cell.hasExternalFormula) {
+      return { isValid: false, reason: "Later workbook rows contain external-link formulas and were excluded." };
+    }
+
+    if (parseNumber(cell.value) === null) {
+      return { isValid: false, reason: "Later workbook rows contain blank or invalid financial values and were excluded." };
+    }
+  }
+
+  return { isValid: true };
+}
+
+function countRemainingMonthlyRows(sheet: XLSX.WorkSheet, startRowIndex: number, lastRow: number) {
+  let count = 0;
+
+  for (let rowIndex = startRowIndex; rowIndex <= lastRow; rowIndex += 1) {
+    if (parseMonth(getCellValue(sheet, rowIndex, 2))) {
+      count += 1;
+    }
+  }
+
+  return count;
 }
 
 function compactAccountDetail(values: {
@@ -274,6 +363,7 @@ function summarizeAnnualRows(monthlyRows: MonthlyCashFlowRow[]): AnnualCashFlowS
       summaries.get(row.year) ??
       {
         year: row.year,
+        monthsIncluded: 0,
         spendingGoal: 0,
         totalNetIncome: 0,
         cmaWithdrawals: 0,
@@ -282,6 +372,7 @@ function summarizeAnnualRows(monthlyRows: MonthlyCashFlowRow[]): AnnualCashFlowS
         surplusDeficit: 0,
       };
 
+    summary.monthsIncluded += 1;
     summary.spendingGoal += row.spendingGoal;
     summary.totalNetIncome += row.totalNetIncome;
     summary.cmaWithdrawals += row.cmaWithdrawals;
@@ -390,28 +481,50 @@ function addNegativeBalance(balances: NegativeAccountBalance[], row: MonthlyCash
 }
 
 function getCellValue(sheet: XLSX.WorkSheet, rowIndex: number, columnIndex: number): SafeCellValue {
+  return getCellInfo(sheet, rowIndex, columnIndex).value;
+}
+
+function getCellInfo(sheet: XLSX.WorkSheet, rowIndex: number, columnIndex: number) {
   const cell = sheet[XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex })];
 
-  if (!cell || cell.t === "e") {
-    return null;
+  if (!cell) {
+    return {
+      value: null,
+      hasError: false,
+      hasExternalFormula: false,
+    };
+  }
+
+  if (cell.t === "e") {
+    return {
+      value: null,
+      hasError: true,
+      hasExternalFormula: false,
+    };
   }
 
   const displayed = typeof cell.w === "string" ? cell.w.trim() : "";
+  const formula = typeof cell.f === "string" ? cell.f : "";
+  const hasExternalFormula = /\[[^\]]+\]/.test(formula);
 
   if (displayed && ERROR_VALUES.has(displayed.toUpperCase())) {
-    return null;
+    return { value: null, hasError: true, hasExternalFormula };
   }
 
   if (cell.v instanceof Date || typeof cell.v === "number" || typeof cell.v === "boolean") {
-    return cell.v;
+    return { value: cell.v, hasError: false, hasExternalFormula };
   }
 
   if (typeof cell.v === "string") {
     const trimmed = cell.v.trim();
-    return ERROR_VALUES.has(trimmed.toUpperCase()) || trimmed === "" ? null : trimmed;
+    return {
+      value: ERROR_VALUES.has(trimmed.toUpperCase()) || trimmed === "" ? null : trimmed,
+      hasError: ERROR_VALUES.has(trimmed.toUpperCase()),
+      hasExternalFormula,
+    };
   }
 
-  return displayed || null;
+  return { value: displayed || null, hasError: false, hasExternalFormula };
 }
 
 function parseNumber(value: SafeCellValue): number | null {

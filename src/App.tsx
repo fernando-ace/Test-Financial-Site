@@ -45,6 +45,7 @@ interface DisplayMetrics {
 }
 
 type AnnualCoverageRow = AnnualCashFlowSummary & {
+  yearLabel: string;
   portfolioDistributions: number;
 };
 
@@ -256,6 +257,7 @@ function App() {
           {!isLoading && report && insights ? (
             <section className="flex min-w-0 flex-col gap-4">
               <WorkbookSummary metadata={metadata} report={report} reportDateLabel={reportDateLabel} displayPeriod={displayPeriod} displayedMonthCount={monthlyDisplayRows.length} />
+              <DataBoundaryWarning report={report} />
 
               <MonthlyIncomeLadderTable
                 collapsedYears={collapsedLedgerYears}
@@ -263,7 +265,7 @@ function App() {
                 onExpandAll={expandAllLedgerYears}
                 onToggleYear={toggleLedgerYear}
                 rows={monthlyDisplayRows}
-                totalRows={report.monthlyRows.length}
+                totalRows={report.rowsParsed}
               />
 
               <section className="kpi-grid grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -272,7 +274,7 @@ function App() {
                 <KpiCard label="Net IRA Distributions" value={displayMetrics.totalIraDistributions} icon={FileSpreadsheet} caption="Total modeled net IRA distributions" />
                 <KpiCard label="CMA Withdrawals" value={displayMetrics.totalCmaWithdrawals} icon={Upload} caption="Total modeled CMA withdrawals" />
                 {displayMetrics.totalOtherOutflows !== 0 ? (
-                  <KpiCard label="Other Outflows" value={displayMetrics.totalOtherOutflows} icon={TrendingDown} caption="Workbook cash-flow outflows outside the displayed spending goal" />
+                  <KpiCard label="Workbook Adjustments" value={displayMetrics.totalOtherOutflows} icon={TrendingDown} caption="Workbook-derived reconciliation to surplus / deficit" />
                 ) : null}
                 <KpiCard label="Total Surplus / Deficit" value={displayMetrics.totalSurplusDeficit} icon={TrendingUp} signed caption="Aggregate cash-flow result" />
                 <KpiCard label="First Cash-Flow Shortfall" value={displayMetrics.firstShortfallMonth ?? "None found"} icon={TrendingDown} caption={`${displayMetrics.shortfallMonthCount} monthly cash-flow shortfalls`} />
@@ -341,10 +343,29 @@ function WorkbookSummary({
         <div className="grid gap-2 text-sm text-slate-600 sm:grid-cols-4 lg:min-w-[560px]">
           <ReportMetaItem label="Prepared by" value={metadata.preparedBy || "Not specified"} />
           <ReportMetaItem label="Report date" value={reportDateLabel} />
-          <ReportMetaItem label="Displayed months" value={`${displayedMonthCount} of ${report.rowsParsed}`} />
+          <ReportMetaItem label="Displayed months" value={String(displayedMonthCount)} />
           <ReportMetaItem label="Period" value={displayPeriod} />
         </div>
       </div>
+    </section>
+  );
+}
+
+function DataBoundaryWarning({ report }: { report: IncomeLadderReport }) {
+  if (!report.dataBoundary?.firstExcludedMonth) {
+    return (
+      <section className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
+        Report period is limited to workbook-backed monthly rows.
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
+      <p className="font-semibold">
+        Data stops at {report.dataBoundary.lastValidMonth}. Later workbook rows beginning {report.dataBoundary.firstExcludedMonth} were excluded.
+      </p>
+      <p className="mt-1 text-amber-800">{report.dataBoundary.reason} Report period is limited to workbook-backed monthly rows.</p>
     </section>
   );
 }
@@ -360,7 +381,7 @@ function AnnualCoverageChart({ annualSummary }: { annualSummary: AnnualCoverageR
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={annualSummary} margin={{ left: 4, right: 10, top: 8, bottom: 8 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-            <XAxis dataKey="year" tickLine={false} axisLine={false} tick={{ fill: "#64748b", fontSize: 12 }} />
+            <XAxis dataKey="yearLabel" tickLine={false} axisLine={false} tick={{ fill: "#64748b", fontSize: 12 }} />
             <YAxis tickLine={false} axisLine={false} tick={{ fill: "#64748b", fontSize: 12 }} tickFormatter={(value) => `$${Math.round(Number(value) / 1000)}k`} />
             <Tooltip content={<AnnualCoverageTooltip />} cursor={{ fill: "#f8fafc" }} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
@@ -391,7 +412,7 @@ function AnnualCoverageTooltip({ active, label, payload }: AnnualCoverageTooltip
       <div className="mt-2 space-y-1 text-slate-600">
         <TooltipLine label="Spending Goal" value={row.spendingGoal} />
         <TooltipLine label="Net Income" value={row.totalNetIncome} />
-        {row.otherOutflows !== 0 ? <TooltipLine label="Other Outflows" value={row.otherOutflows} /> : null}
+        {row.otherOutflows !== 0 ? <TooltipLine label="Workbook Adjustment" value={row.otherOutflows} /> : null}
         <TooltipLine label="Portfolio Funding" value={row.portfolioDistributions} emphasized />
         <div className="space-y-0.5 border-l-2 border-slate-200 pl-3 text-xs">
           <TooltipLine label="Net IRA" value={row.iraDistributions} />
@@ -512,7 +533,7 @@ function MonthlyIncomeLadderTable({
           <h2 className="mt-1 text-xl font-semibold text-slate-950">Monthly Income Ladder</h2>
           <p className="mt-1 text-sm text-slate-500">
             A polished spreadsheet-style view of where monthly cash flow is expected to come from.
-            {isLimited ? ` Showing the first ${ANNUAL_DISPLAY_YEAR_LIMIT} years (${rows.length} of ${totalRows} parsed months).` : ` Showing ${rows.length} parsed months.`}
+            {isLimited ? ` Showing the first ${ANNUAL_DISPLAY_YEAR_LIMIT} years (${rows.length} of ${totalRows} valid months).` : ` Showing ${rows.length} valid workbook-backed months.`}
           </p>
           {balanceWarning ? (
             <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
@@ -550,7 +571,7 @@ function MonthlyIncomeLadderTable({
               </th>
               {hasOtherOutflows ? (
                 <th rowSpan={2} className="top-0 bg-slate-100 px-3 py-3 text-right">
-                  Other Outflow
+                  Workbook Adj.
                 </th>
               ) : null}
               {visibleAccounts.client1Ira ? (
@@ -757,7 +778,7 @@ function CompactPrintReport({
   reportDateLabel,
 }: {
   advisorNotes: string;
-  annualRows: AnnualCashFlowSummary[];
+  annualRows: AnnualCoverageRow[];
   displayPeriod: string;
   displayMetrics: DisplayMetrics;
   insights: ReturnType<typeof getInsights>;
@@ -799,17 +820,23 @@ function CompactPrintReport({
           </div>
           <div>
             <dt>Displayed months</dt>
-            <dd>{monthlyRows.length} of {report.rowsParsed}</dd>
+            <dd>{monthlyRows.length}</dd>
           </div>
         </dl>
       </header>
+
+      {report.dataBoundary?.firstExcludedMonth ? (
+        <section className="compact-print-warning print-block">
+          Data stops at {report.dataBoundary.lastValidMonth}. Later workbook rows beginning {report.dataBoundary.firstExcludedMonth} were excluded. {report.dataBoundary.reason}
+        </section>
+      ) : null}
 
       <section className="compact-print-grid print-block">
         <CompactPrintKpi label="Total Spending Goal" value={formatCurrency(displayMetrics.totalSpendingGoal)} />
         <CompactPrintKpi label="Total Net Income" value={formatCurrency(displayMetrics.totalNetIncome)} />
         <CompactPrintKpi label="Net IRA Distributions" value={formatCurrency(displayMetrics.totalIraDistributions)} />
         <CompactPrintKpi label="CMA Withdrawals" value={formatCurrency(displayMetrics.totalCmaWithdrawals)} />
-        {hasOtherOutflows ? <CompactPrintKpi label="Other Outflows" value={formatCurrency(displayMetrics.totalOtherOutflows)} /> : null}
+        {hasOtherOutflows ? <CompactPrintKpi label="Workbook Adjustments" value={formatCurrency(displayMetrics.totalOtherOutflows)} /> : null}
         <CompactPrintKpi label="Total Surplus / Deficit" value={formatSignedCurrency(displayMetrics.totalSurplusDeficit)} />
       </section>
 
@@ -902,14 +929,14 @@ function AnnualSummaryTable({ rows, compact = false }: { rows: AnnualCashFlowSum
           <th className="numeric">Net Income</th>
           <th className="numeric">Net IRA Distributions</th>
           <th className="numeric">CMA Withdrawals</th>
-          {hasOtherOutflows ? <th className="numeric">Other Outflows</th> : null}
+          {hasOtherOutflows ? <th className="numeric">Workbook Adjustments</th> : null}
           <th className="numeric">Surplus / Deficit</th>
         </tr>
       </thead>
       <tbody>
         {rows.map((row) => (
           <tr key={row.year}>
-            <td>{row.year}</td>
+            <td>{formatAnnualSummaryYear(row)}</td>
             <td className="numeric">{formatCurrency(row.spendingGoal)}</td>
             <td className="numeric">{formatCurrency(row.totalNetIncome)}</td>
             <td className="numeric">{formatCurrency(row.iraDistributions)}</td>
@@ -935,7 +962,7 @@ function PrintMonthlyLedger({ rows }: { rows: MonthlyCashFlowRow[] }) {
           <th>Month</th>
           <th className="numeric">Goal</th>
           <th className="numeric">Net Income</th>
-          {hasOtherOutflows ? <th className="numeric">Other Outflow</th> : null}
+          {hasOtherOutflows ? <th className="numeric">Workbook Adj.</th> : null}
           {visibleAccounts.client1Ira ? (
             <>
               <th className="numeric">C1 Mat.</th>
@@ -1037,7 +1064,7 @@ function CompactMaturityList({ maturities }: { maturities: MaturityEvent[] }) {
   );
 }
 
-function CompactPrintCoverageChart({ data }: { data: AnnualCashFlowSummary[] }) {
+function CompactPrintCoverageChart({ data }: { data: AnnualCoverageRow[] }) {
   const totals = {
     spendingGoal: sumAnnualRows(data, "spendingGoal"),
     totalNetIncome: sumAnnualRows(data, "totalNetIncome"),
@@ -1105,7 +1132,7 @@ function CompactPrintCoverageChart({ data }: { data: AnnualCashFlowSummary[] }) 
           <g key={item.year}>
             {index > 0 ? <line x1="0" x2={chartWidth} y1={y - 4} y2={y - 4} stroke="#e2e8f0" strokeWidth="1" /> : null}
             <text x="0" y={y + 7} fill="#334155" fontSize="10" fontWeight="700">
-              {item.year}
+              {item.yearLabel}
             </text>
             <rect x={yearLabelWidth} y={y - 1} width={drawableBarWidth} height="7" rx="3.5" fill="#e2e8f0" />
             <rect x={yearLabelWidth} y={y - 1} width={spendingWidth} height="7" rx="3.5" fill="#0f766e" />
@@ -1282,6 +1309,7 @@ function getUpcomingMaturities(events: MaturityEvent[], limit: number) {
 function getAnnualDisplayRows(rows: AnnualCashFlowSummary[]): AnnualCoverageRow[] {
   return rows.slice(0, ANNUAL_DISPLAY_YEAR_LIMIT).map((row) => ({
     ...row,
+    yearLabel: formatAnnualSummaryYear(row),
     portfolioDistributions: row.iraDistributions + row.cmaWithdrawals,
   }));
 }
@@ -1324,14 +1352,18 @@ function sumAnnualRows(rows: AnnualCashFlowSummary[], key: keyof Omit<AnnualCash
 }
 
 function formatDisplayPeriod(report: IncomeLadderReport, annualRows: AnnualCashFlowSummary[]) {
-  const first = annualRows[0]?.year;
-  const last = annualRows[annualRows.length - 1]?.year;
+  const first = formatMonth(report.metrics.firstMonth);
+  const last = formatMonth(report.metrics.lastMonth);
 
   if (first && last) {
-    return first === last ? String(first) : `${first} to ${last}`;
+    return first === last ? first : `${first} to ${last}`;
   }
 
   return formatPeriod(report);
+}
+
+function formatAnnualSummaryYear(row: AnnualCashFlowSummary) {
+  return row.monthsIncluded === 12 ? String(row.year) : `${row.year} partial`;
 }
 
 function formatPeriod(report: IncomeLadderReport) {
