@@ -6,6 +6,8 @@ import {
   IncomeLadderReport,
   MaturityEvent,
   MonthlyCashFlowRow,
+  NegativeAccountBalance,
+  getNegativeAccountBalances,
   parseIncomeLadderWorkbookFromArrayBuffer,
 } from "./lib/parseIncomeLadderWorkbook";
 import { formatCurrency, formatSignedCurrency } from "./lib/formatters";
@@ -32,9 +34,14 @@ interface DisplayMetrics {
   totalIraDistributions: number;
   totalCmaWithdrawals: number;
   totalPortfolioDistributions: number;
+  totalOtherOutflows: number;
   totalSurplusDeficit: number;
   firstShortfallMonth?: string;
   shortfallMonthCount: number;
+  firstNegativeAccountBalanceMonth?: string;
+  negativeAccountBalanceCount: number;
+  accountsWithNegativeBalances: string[];
+  largestNegativeAccountBalance?: NegativeAccountBalance;
 }
 
 type AnnualCoverageRow = AnnualCashFlowSummary & {
@@ -248,7 +255,7 @@ function App() {
 
           {!isLoading && report && insights ? (
             <section className="flex min-w-0 flex-col gap-4">
-              <WorkbookSummary metadata={metadata} report={report} reportDateLabel={reportDateLabel} displayPeriod={displayPeriod} />
+              <WorkbookSummary metadata={metadata} report={report} reportDateLabel={reportDateLabel} displayPeriod={displayPeriod} displayedMonthCount={monthlyDisplayRows.length} />
 
               <MonthlyIncomeLadderTable
                 collapsedYears={collapsedLedgerYears}
@@ -264,8 +271,21 @@ function App() {
                 <KpiCard label="Total Net Income" value={displayMetrics.totalNetIncome} icon={Landmark} caption="Modeled income over period" />
                 <KpiCard label="Net IRA Distributions" value={displayMetrics.totalIraDistributions} icon={FileSpreadsheet} caption="Total modeled net IRA distributions" />
                 <KpiCard label="CMA Withdrawals" value={displayMetrics.totalCmaWithdrawals} icon={Upload} caption="Total modeled CMA withdrawals" />
+                {displayMetrics.totalOtherOutflows !== 0 ? (
+                  <KpiCard label="Other Outflows" value={displayMetrics.totalOtherOutflows} icon={TrendingDown} caption="Workbook cash-flow outflows outside the displayed spending goal" />
+                ) : null}
                 <KpiCard label="Total Surplus / Deficit" value={displayMetrics.totalSurplusDeficit} icon={TrendingUp} signed caption="Aggregate cash-flow result" />
-                <KpiCard label="First Shortfall Month" value={displayMetrics.firstShortfallMonth ?? "None found"} icon={TrendingDown} caption={`${displayMetrics.shortfallMonthCount} shortfall months`} />
+                <KpiCard label="First Cash-Flow Shortfall" value={displayMetrics.firstShortfallMonth ?? "None found"} icon={TrendingDown} caption={`${displayMetrics.shortfallMonthCount} monthly cash-flow shortfalls`} />
+                <KpiCard
+                  label="First Negative Account Balance"
+                  value={displayMetrics.firstNegativeAccountBalanceMonth ?? "None found"}
+                  icon={TrendingDown}
+                  caption={
+                    displayMetrics.negativeAccountBalanceCount > 0
+                      ? `${displayMetrics.accountsWithNegativeBalances.join(", ")} account cash balances go negative`
+                      : "No negative account cash balances in displayed months"
+                  }
+                />
               </section>
 
               <section className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.55fr)]">
@@ -297,11 +317,13 @@ function App() {
 
 function WorkbookSummary({
   displayPeriod,
+  displayedMonthCount,
   metadata,
   report,
   reportDateLabel,
 }: {
   displayPeriod: string;
+  displayedMonthCount: number;
   metadata: ReportMetadata;
   report: IncomeLadderReport;
   reportDateLabel: string;
@@ -319,7 +341,7 @@ function WorkbookSummary({
         <div className="grid gap-2 text-sm text-slate-600 sm:grid-cols-4 lg:min-w-[560px]">
           <ReportMetaItem label="Prepared by" value={metadata.preparedBy || "Not specified"} />
           <ReportMetaItem label="Report date" value={reportDateLabel} />
-          <ReportMetaItem label="Cash-flow rows" value={String(report.rowsParsed)} />
+          <ReportMetaItem label="Displayed months" value={`${displayedMonthCount} of ${report.rowsParsed}`} />
           <ReportMetaItem label="Period" value={displayPeriod} />
         </div>
       </div>
@@ -369,6 +391,7 @@ function AnnualCoverageTooltip({ active, label, payload }: AnnualCoverageTooltip
       <div className="mt-2 space-y-1 text-slate-600">
         <TooltipLine label="Spending Goal" value={row.spendingGoal} />
         <TooltipLine label="Net Income" value={row.totalNetIncome} />
+        {row.otherOutflows !== 0 ? <TooltipLine label="Other Outflows" value={row.otherOutflows} /> : null}
         <TooltipLine label="Portfolio Funding" value={row.portfolioDistributions} emphasized />
         <div className="space-y-0.5 border-l-2 border-slate-200 pl-3 text-xs">
           <TooltipLine label="Net IRA" value={row.iraDistributions} />
@@ -474,7 +497,8 @@ function MonthlyIncomeLadderTable({
   }
 
   const visibleAccounts = getVisibleAccountGroups(rows);
-  const columnCount = getMonthlyLedgerColumnCount(visibleAccounts);
+  const hasOtherOutflows = rows.some((row) => row.otherOutflows !== 0);
+  const columnCount = getMonthlyLedgerColumnCount(visibleAccounts, hasOtherOutflows);
   const isLimited = totalRows > rows.length;
   const visibleYears = Array.from(new Set(rows.map((row) => row.year)));
   const allYearsCollapsed = visibleYears.every((year) => collapsedYears.has(year));
@@ -514,6 +538,11 @@ function MonthlyIncomeLadderTable({
               <th rowSpan={2} className="top-0 bg-slate-100 px-3 py-3 text-right">
                 Income
               </th>
+              {hasOtherOutflows ? (
+                <th rowSpan={2} className="top-0 bg-slate-100 px-3 py-3 text-right">
+                  Other Outflow
+                </th>
+              ) : null}
               {visibleAccounts.client1Ira ? (
                 <th colSpan={3} className="top-0 border-l border-slate-200 bg-slate-100 px-3 py-2 text-center">
                   Client 1 IRA
@@ -583,24 +612,25 @@ function MonthlyIncomeLadderTable({
                       <td className={`sticky left-0 z-10 px-3 py-2.5 font-semibold ${isShortfall ? "bg-rose-50 text-rose-950" : "bg-inherit text-slate-950"}`}>{row.label}</td>
                       <LedgerCurrencyCell value={row.spendingGoal} />
                       <LedgerCurrencyCell value={row.totalNetIncome} />
+                      {hasOtherOutflows ? <LedgerCurrencyCell value={row.otherOutflows} optional /> : null}
                       {visibleAccounts.client1Ira ? (
                         <>
                           <LedgerCurrencyCell value={row.client1Ira.maturingAmount} separated optional />
-                          <LedgerCurrencyCell value={row.client1Ira.cashBalance} optional />
+                          <LedgerCurrencyCell value={row.client1Ira.cashBalance} optional tone={getBalanceTone(row.client1Ira.cashBalance)} />
                           <LedgerCurrencyCell value={row.client1Ira.netDistribution} optional />
                         </>
                       ) : null}
                       {visibleAccounts.client2Ira ? (
                         <>
                           <LedgerCurrencyCell value={row.client2Ira.maturingAmount} separated optional />
-                          <LedgerCurrencyCell value={row.client2Ira.cashBalance} optional />
+                          <LedgerCurrencyCell value={row.client2Ira.cashBalance} optional tone={getBalanceTone(row.client2Ira.cashBalance)} />
                           <LedgerCurrencyCell value={row.client2Ira.netDistribution} optional />
                         </>
                       ) : null}
                       {visibleAccounts.cma ? (
                         <>
                           <LedgerCurrencyCell value={row.cma.maturingAmount} separated optional />
-                          <LedgerCurrencyCell value={row.cma.cashBalance} optional />
+                          <LedgerCurrencyCell value={row.cma.cashBalance} optional tone={getBalanceTone(row.cma.cashBalance)} />
                           <LedgerCurrencyCell value={row.cma.withdrawal} optional />
                         </>
                       ) : null}
@@ -636,12 +666,21 @@ function LedgerCurrencyCell({
   const hasValue = typeof value === "number" && Number.isFinite(value);
   const displayValue = hasValue ? (signed ? formatSignedCurrency(value) : formatCurrency(value)) : optional ? "" : formatCurrency(0);
   const toneClass = tone === "negative" ? "text-rose-700" : tone === "positive" ? "text-emerald-700" : "text-slate-700";
+  const emphasisClass = emphasize || tone ? `font-semibold ${toneClass}` : "text-slate-700";
 
   return (
-    <td className={`whitespace-nowrap px-3 py-2.5 text-right tabular-nums ${separated ? "border-l border-slate-200" : ""} ${emphasize ? `font-semibold ${toneClass}` : "text-slate-700"}`}>
+    <td className={`whitespace-nowrap px-3 py-2.5 text-right tabular-nums ${separated ? "border-l border-slate-200" : ""} ${emphasisClass}`}>
       {displayValue}
     </td>
   );
+}
+
+function getBalanceTone(value?: number) {
+  return typeof value === "number" && Number.isFinite(value) && value < 0 ? "negative" : undefined;
+}
+
+function isNegativeBalance(value?: number) {
+  return typeof value === "number" && Number.isFinite(value) && value < 0;
 }
 
 interface VisibleAccountGroups {
@@ -659,11 +698,11 @@ function getVisibleAccountGroups(rows: MonthlyCashFlowRow[]): VisibleAccountGrou
 }
 
 function hasAccountDetail(detail: MonthlyCashFlowRow["client1Ira"]) {
-  return [detail.maturingAmount, detail.cashBalance, detail.netDistribution, detail.withdrawal].some((value) => typeof value === "number" && Number.isFinite(value));
+  return [detail.maturingAmount, detail.cashBalance, detail.netDistribution, detail.withdrawal].some((value) => typeof value === "number" && Number.isFinite(value) && value !== 0);
 }
 
-function getMonthlyLedgerColumnCount(visibleAccounts: VisibleAccountGroups) {
-  return 5 + (visibleAccounts.client1Ira ? 3 : 0) + (visibleAccounts.client2Ira ? 3 : 0) + (visibleAccounts.cma ? 3 : 0);
+function getMonthlyLedgerColumnCount(visibleAccounts: VisibleAccountGroups, hasOtherOutflows = false) {
+  return 5 + (hasOtherOutflows ? 1 : 0) + (visibleAccounts.client1Ira ? 3 : 0) + (visibleAccounts.client2Ira ? 3 : 0) + (visibleAccounts.cma ? 3 : 0);
 }
 
 function InsightPanel({ insights }: { insights: ReturnType<typeof getInsights> }) {
@@ -675,6 +714,8 @@ function InsightPanel({ insights }: { insights: ReturnType<typeof getInsights> }
         <Insight label="First projected shortfall" value={insights.firstShortfallMonth} />
         <Insight label="Shortfall months" value={insights.shortfallMonthCount} />
         <Insight label="Largest annual shortfall" value={insights.largestAnnualShortfall} />
+        <Insight label="First negative account balance" value={insights.firstNegativeAccountBalanceMonth} />
+        <Insight label="Account balance warning" value={insights.negativeAccountBalanceSummary} />
         <Insight label="Total net distributions/withdrawals" value={insights.totalDistributionWithdrawals} />
       </dl>
     </article>
@@ -705,6 +746,7 @@ function CompactPrintReport({
   reportDateLabel: string;
 }) {
   const notes = advisorNotes.trim();
+  const hasOtherOutflows = monthlyRows.some((row) => row.otherOutflows !== 0);
 
   return (
     <section className="print-only compact-print-report">
@@ -733,8 +775,8 @@ function CompactPrintReport({
             <dd>{displayPeriod}</dd>
           </div>
           <div>
-            <dt>Cash-flow rows</dt>
-            <dd>{report.rowsParsed}</dd>
+            <dt>Displayed months</dt>
+            <dd>{monthlyRows.length} of {report.rowsParsed}</dd>
           </div>
         </dl>
       </header>
@@ -744,6 +786,7 @@ function CompactPrintReport({
         <CompactPrintKpi label="Total Net Income" value={formatCurrency(displayMetrics.totalNetIncome)} />
         <CompactPrintKpi label="Net IRA Distributions" value={formatCurrency(displayMetrics.totalIraDistributions)} />
         <CompactPrintKpi label="CMA Withdrawals" value={formatCurrency(displayMetrics.totalCmaWithdrawals)} />
+        {hasOtherOutflows ? <CompactPrintKpi label="Other Outflows" value={formatCurrency(displayMetrics.totalOtherOutflows)} /> : null}
         <CompactPrintKpi label="Total Surplus / Deficit" value={formatSignedCurrency(displayMetrics.totalSurplusDeficit)} />
       </section>
 
@@ -771,6 +814,10 @@ function CompactPrintReport({
             <div>
               <dt>Largest annual shortfall</dt>
               <dd>{insights.largestAnnualShortfall}</dd>
+            </div>
+            <div>
+              <dt>First negative account balance</dt>
+              <dd>{insights.firstNegativeAccountBalanceMonth}</dd>
             </div>
           </dl>
         </article>
@@ -806,6 +853,8 @@ function CompactPrintReport({
 }
 
 function AnnualSummaryTable({ rows, compact = false }: { rows: AnnualCashFlowSummary[]; compact?: boolean }) {
+  const hasOtherOutflows = rows.some((row) => row.otherOutflows !== 0);
+
   return (
     <table className={compact ? "compact-print-table" : "w-full border-collapse text-sm"}>
       <thead>
@@ -815,6 +864,7 @@ function AnnualSummaryTable({ rows, compact = false }: { rows: AnnualCashFlowSum
           <th className="numeric">Net Income</th>
           <th className="numeric">Net IRA Distributions</th>
           <th className="numeric">CMA Withdrawals</th>
+          {hasOtherOutflows ? <th className="numeric">Other Outflows</th> : null}
           <th className="numeric">Surplus / Deficit</th>
         </tr>
       </thead>
@@ -826,6 +876,7 @@ function AnnualSummaryTable({ rows, compact = false }: { rows: AnnualCashFlowSum
             <td className="numeric">{formatCurrency(row.totalNetIncome)}</td>
             <td className="numeric">{formatCurrency(row.iraDistributions)}</td>
             <td className="numeric">{formatCurrency(row.cmaWithdrawals)}</td>
+            {hasOtherOutflows ? <td className="numeric">{formatCurrency(row.otherOutflows)}</td> : null}
             <td className="numeric">{formatSignedCurrency(row.surplusDeficit)}</td>
           </tr>
         ))}
@@ -836,7 +887,8 @@ function AnnualSummaryTable({ rows, compact = false }: { rows: AnnualCashFlowSum
 
 function PrintMonthlyLedger({ rows }: { rows: MonthlyCashFlowRow[] }) {
   const visibleAccounts = getVisibleAccountGroups(rows);
-  const columnCount = getMonthlyLedgerColumnCount(visibleAccounts);
+  const hasOtherOutflows = rows.some((row) => row.otherOutflows !== 0);
+  const columnCount = getMonthlyLedgerColumnCount(visibleAccounts, hasOtherOutflows);
 
   return (
     <table className="compact-print-table compact-print-ledger-table">
@@ -845,18 +897,19 @@ function PrintMonthlyLedger({ rows }: { rows: MonthlyCashFlowRow[] }) {
           <th>Month</th>
           <th className="numeric">Goal</th>
           <th className="numeric">Net Income</th>
+          {hasOtherOutflows ? <th className="numeric">Other Outflow</th> : null}
           {visibleAccounts.client1Ira ? (
             <>
               <th className="numeric">C1 Mat.</th>
               <th className="numeric">C1 Cash</th>
-              <th className="numeric">C1 Net IRA</th>
+              <th className="numeric">C1 Dist.</th>
             </>
           ) : null}
           {visibleAccounts.client2Ira ? (
             <>
               <th className="numeric">C2 Mat.</th>
               <th className="numeric">C2 Cash</th>
-              <th className="numeric">C2 Net IRA</th>
+              <th className="numeric">C2 Dist.</th>
             </>
           ) : null}
           {visibleAccounts.cma ? (
@@ -886,24 +939,25 @@ function PrintMonthlyLedger({ rows }: { rows: MonthlyCashFlowRow[] }) {
                 <td>{row.label}</td>
                 <td className="numeric">{formatCurrency(row.spendingGoal)}</td>
                 <td className="numeric">{formatCurrency(row.totalNetIncome)}</td>
+                {hasOtherOutflows ? <td className="numeric">{formatLedgerOptionalCurrency(row.otherOutflows)}</td> : null}
                 {visibleAccounts.client1Ira ? (
                   <>
                     <td className="numeric">{formatLedgerOptionalCurrency(row.client1Ira.maturingAmount)}</td>
-                    <td className="numeric">{formatLedgerOptionalCurrency(row.client1Ira.cashBalance)}</td>
+                    <td className={`numeric ${isNegativeBalance(row.client1Ira.cashBalance) ? "compact-print-negative-cell" : ""}`}>{formatLedgerOptionalCurrency(row.client1Ira.cashBalance)}</td>
                     <td className="numeric">{formatLedgerOptionalCurrency(row.client1Ira.netDistribution)}</td>
                   </>
                 ) : null}
                 {visibleAccounts.client2Ira ? (
                   <>
                     <td className="numeric">{formatLedgerOptionalCurrency(row.client2Ira.maturingAmount)}</td>
-                    <td className="numeric">{formatLedgerOptionalCurrency(row.client2Ira.cashBalance)}</td>
+                    <td className={`numeric ${isNegativeBalance(row.client2Ira.cashBalance) ? "compact-print-negative-cell" : ""}`}>{formatLedgerOptionalCurrency(row.client2Ira.cashBalance)}</td>
                     <td className="numeric">{formatLedgerOptionalCurrency(row.client2Ira.netDistribution)}</td>
                   </>
                 ) : null}
                 {visibleAccounts.cma ? (
                   <>
                     <td className="numeric">{formatLedgerOptionalCurrency(row.cma.maturingAmount)}</td>
-                    <td className="numeric">{formatLedgerOptionalCurrency(row.cma.cashBalance)}</td>
+                    <td className={`numeric ${isNegativeBalance(row.cma.cashBalance) ? "compact-print-negative-cell" : ""}`}>{formatLedgerOptionalCurrency(row.cma.cashBalance)}</td>
                     <td className="numeric">{formatLedgerOptionalCurrency(row.cma.withdrawal)}</td>
                   </>
                 ) : null}
@@ -1166,12 +1220,17 @@ function getInsights(annualRows: AnnualCashFlowSummary[], displayMetrics: Displa
     (largest, row) => (row.surplusDeficit < 0 && (!largest || row.surplusDeficit < largest.surplusDeficit) ? row : largest),
     null,
   );
+  const largestNegative = displayMetrics.largestNegativeAccountBalance;
   return {
     reportPeriod: displayPeriod,
     firstShortfallMonth: displayMetrics.firstShortfallMonth ?? "None found",
     shortfallMonthCount: `${displayMetrics.shortfallMonthCount} month${displayMetrics.shortfallMonthCount === 1 ? "" : "s"}`,
     largestAnnualShortfall: largestAnnualShortfall ? `${largestAnnualShortfall.year}: ${formatSignedCurrency(largestAnnualShortfall.surplusDeficit)}` : "None found",
     totalDistributionWithdrawals: formatCurrency(displayMetrics.totalPortfolioDistributions),
+    firstNegativeAccountBalanceMonth: displayMetrics.firstNegativeAccountBalanceMonth ?? "None found",
+    negativeAccountBalanceSummary: largestNegative
+      ? `${displayMetrics.accountsWithNegativeBalances.join(", ")}; lowest ${largestNegative.account} ${formatCurrency(largestNegative.value)} in ${largestNegative.label}`
+      : "None found",
   };
 }
 
@@ -1196,6 +1255,11 @@ function getMonthlyDisplayRows(rows: MonthlyCashFlowRow[], annualRows: AnnualCas
 
 function getDisplayMetrics(annualRows: AnnualCashFlowSummary[], monthlyRows: MonthlyCashFlowRow[]): DisplayMetrics {
   const firstShortfall = monthlyRows.find((row) => row.surplusDeficit < 0);
+  const negativeBalances = getNegativeAccountBalances(monthlyRows);
+  const largestNegativeAccountBalance = negativeBalances.reduce<NegativeAccountBalance | undefined>(
+    (largest, item) => (!largest || item.value < largest.value ? item : largest),
+    undefined,
+  );
 
   const totalIraDistributions = sumAnnualRows(annualRows, "iraDistributions");
   const totalCmaWithdrawals = sumAnnualRows(annualRows, "cmaWithdrawals");
@@ -1206,9 +1270,14 @@ function getDisplayMetrics(annualRows: AnnualCashFlowSummary[], monthlyRows: Mon
     totalIraDistributions,
     totalCmaWithdrawals,
     totalPortfolioDistributions: totalIraDistributions + totalCmaWithdrawals,
+    totalOtherOutflows: sumAnnualRows(annualRows, "otherOutflows"),
     totalSurplusDeficit: sumAnnualRows(annualRows, "surplusDeficit"),
     firstShortfallMonth: firstShortfall?.label,
     shortfallMonthCount: monthlyRows.filter((row) => row.surplusDeficit < 0).length,
+    firstNegativeAccountBalanceMonth: negativeBalances[0]?.label,
+    negativeAccountBalanceCount: negativeBalances.length,
+    accountsWithNegativeBalances: Array.from(new Set(negativeBalances.map((item) => item.account))),
+    largestNegativeAccountBalance,
   };
 }
 

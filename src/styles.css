@@ -424,6 +424,11 @@ textarea {
     color: #881337 !important;
   }
 
+  .compact-print-negative-cell {
+    color: #be123c !important;
+    font-weight: 800;
+  }
+
   .compact-empty {
     color: #64748b;
     margin: 0;

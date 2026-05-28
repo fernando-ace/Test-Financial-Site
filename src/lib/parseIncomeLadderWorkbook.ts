@@ -8,6 +8,7 @@ export interface MonthlyCashFlowRow {
   totalNetIncome: number;
   cmaWithdrawals: number;
   iraDistributions: number;
+  otherOutflows: number;
   surplusDeficit: number;
   client1Ira: MonthlyAccountDetail;
   client2Ira: MonthlyAccountDetail;
@@ -27,6 +28,7 @@ export interface AnnualCashFlowSummary {
   totalNetIncome: number;
   cmaWithdrawals: number;
   iraDistributions: number;
+  otherOutflows: number;
   surplusDeficit: number;
 }
 
@@ -58,9 +60,19 @@ export interface IncomeLadderReport {
     totalNetIncome: number;
     totalCmaWithdrawals: number;
     totalIraDistributions: number;
+    totalOtherOutflows: number;
     totalSurplusDeficit: number;
     firstShortfallMonth?: string;
     shortfallMonthCount: number;
+    firstNegativeAccountBalanceMonth?: string;
+    negativeAccountBalanceCount: number;
+    accountsWithNegativeBalances: string[];
+    largestNegativeAccountBalance?: {
+      account: MaturityEvent["account"];
+      month: string;
+      label: string;
+      value: number;
+    };
     endingClient1CashBalance?: number;
     endingClient2CashBalance?: number;
     endingCmaCashBalance?: number;
@@ -134,6 +146,12 @@ function extractMonthlyRows(sheet: XLSX.WorkSheet, lastRow: number): MonthlyCash
       iraDistributions: parseNumber(getCellValue(sheet, rowIndex, 6)),
       surplusDeficit: parseNumber(getCellValue(sheet, rowIndex, 7)),
     };
+    const spendingGoal = values.spendingGoal ?? 0;
+    const totalNetIncome = values.totalNetIncome ?? 0;
+    const cmaWithdrawals = values.cmaWithdrawals ?? 0;
+    const iraDistributions = values.iraDistributions ?? 0;
+    const surplusDeficit = values.surplusDeficit ?? 0;
+    const otherOutflows = normalizeCurrencyDifference(totalNetIncome + cmaWithdrawals + iraDistributions - spendingGoal - surplusDeficit);
     const client1Ira = {
       maturingAmount: parseNumber(getCellValue(sheet, rowIndex, 11)),
       cashBalance: parseNumber(getCellValue(sheet, rowIndex, 12)),
@@ -158,11 +176,12 @@ function extractMonthlyRows(sheet: XLSX.WorkSheet, lastRow: number): MonthlyCash
       month: monthInfo.month,
       label: monthInfo.label,
       year: monthInfo.year,
-      spendingGoal: values.spendingGoal ?? 0,
-      totalNetIncome: values.totalNetIncome ?? 0,
-      cmaWithdrawals: values.cmaWithdrawals ?? 0,
-      iraDistributions: values.iraDistributions ?? 0,
-      surplusDeficit: values.surplusDeficit ?? 0,
+      spendingGoal,
+      totalNetIncome,
+      cmaWithdrawals,
+      iraDistributions,
+      otherOutflows,
+      surplusDeficit,
       client1Ira: compactAccountDetail(client1Ira),
       client2Ira: compactAccountDetail(client2Ira),
       cma: compactAccountDetail(cma),
@@ -179,10 +198,10 @@ function compactAccountDetail(values: {
   withdrawal?: number | null;
 }): MonthlyAccountDetail {
   return {
-    maturingAmount: values.maturingAmount ?? undefined,
-    cashBalance: values.cashBalance ?? undefined,
-    netDistribution: values.netDistribution ?? undefined,
-    withdrawal: values.withdrawal ?? undefined,
+    maturingAmount: compactOptionalNumber(values.maturingAmount),
+    cashBalance: compactOptionalNumber(values.cashBalance),
+    netDistribution: compactOptionalNumber(values.netDistribution),
+    withdrawal: compactOptionalNumber(values.withdrawal),
   };
 }
 
@@ -259,6 +278,7 @@ function summarizeAnnualRows(monthlyRows: MonthlyCashFlowRow[]): AnnualCashFlowS
         totalNetIncome: 0,
         cmaWithdrawals: 0,
         iraDistributions: 0,
+        otherOutflows: 0,
         surplusDeficit: 0,
       };
 
@@ -266,6 +286,7 @@ function summarizeAnnualRows(monthlyRows: MonthlyCashFlowRow[]): AnnualCashFlowS
     summary.totalNetIncome += row.totalNetIncome;
     summary.cmaWithdrawals += row.cmaWithdrawals;
     summary.iraDistributions += row.iraDistributions;
+    summary.otherOutflows += row.otherOutflows;
     summary.surplusDeficit += row.surplusDeficit;
     summaries.set(row.year, summary);
   });
@@ -306,6 +327,11 @@ function calculateMetrics(
   maturityEvents: MaturityEvent[],
 ): IncomeLadderReport["metrics"] {
   const firstShortfall = monthlyRows.find((row) => row.surplusDeficit < 0);
+  const negativeBalances = getNegativeAccountBalances(monthlyRows);
+  const largestNegativeAccountBalance = negativeBalances.reduce<(typeof negativeBalances)[number] | undefined>(
+    (largest, item) => (!largest || item.value < largest.value ? item : largest),
+    undefined,
+  );
 
   return {
     firstMonth: monthlyRows[0]?.month,
@@ -314,9 +340,14 @@ function calculateMetrics(
     totalNetIncome: sum(monthlyRows, "totalNetIncome"),
     totalCmaWithdrawals: sum(monthlyRows, "cmaWithdrawals"),
     totalIraDistributions: sum(monthlyRows, "iraDistributions"),
+    totalOtherOutflows: sum(monthlyRows, "otherOutflows"),
     totalSurplusDeficit: sum(monthlyRows, "surplusDeficit"),
     firstShortfallMonth: firstShortfall?.label,
     shortfallMonthCount: monthlyRows.filter((row) => row.surplusDeficit < 0).length,
+    firstNegativeAccountBalanceMonth: negativeBalances[0]?.label,
+    negativeAccountBalanceCount: negativeBalances.length,
+    accountsWithNegativeBalances: Array.from(new Set(negativeBalances.map((item) => item.account))),
+    largestNegativeAccountBalance,
     endingClient1CashBalance: getEndingCashBalance(maturityEvents, "Client 1 IRA"),
     endingClient2CashBalance: getEndingCashBalance(maturityEvents, "Client 2 IRA"),
     endingCmaCashBalance: getEndingCashBalance(maturityEvents, "CMA"),
@@ -326,6 +357,36 @@ function calculateMetrics(
 function getEndingCashBalance(events: MaturityEvent[], account: MaturityEvent["account"]) {
   const event = [...events].reverse().find((item) => item.account === account && typeof item.cashBalance === "number");
   return event?.cashBalance;
+}
+
+export interface NegativeAccountBalance {
+  account: MaturityEvent["account"];
+  month: string;
+  label: string;
+  value: number;
+}
+
+export function getNegativeAccountBalances(monthlyRows: MonthlyCashFlowRow[]): NegativeAccountBalance[] {
+  const balances: NegativeAccountBalance[] = [];
+
+  monthlyRows.forEach((row) => {
+    addNegativeBalance(balances, row, "Client 1 IRA", row.client1Ira.cashBalance);
+    addNegativeBalance(balances, row, "Client 2 IRA", row.client2Ira.cashBalance);
+    addNegativeBalance(balances, row, "CMA", row.cma.cashBalance);
+  });
+
+  return balances;
+}
+
+function addNegativeBalance(balances: NegativeAccountBalance[], row: MonthlyCashFlowRow, account: MaturityEvent["account"], value?: number) {
+  if (typeof value === "number" && Number.isFinite(value) && value < 0) {
+    balances.push({
+      account,
+      month: row.month,
+      label: row.label,
+      value,
+    });
+  }
 }
 
 function getCellValue(sheet: XLSX.WorkSheet, rowIndex: number, columnIndex: number): SafeCellValue {
@@ -411,7 +472,18 @@ function hasAnyNumber(values: Record<string, number | null>) {
   return Object.values(values).some((value) => typeof value === "number" && Number.isFinite(value) && value !== 0);
 }
 
-function sum(rows: MonthlyCashFlowRow[], key: keyof Pick<MonthlyCashFlowRow, "spendingGoal" | "totalNetIncome" | "cmaWithdrawals" | "iraDistributions" | "surplusDeficit">) {
+function compactOptionalNumber(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value !== 0 ? value : undefined;
+}
+
+function normalizeCurrencyDifference(value: number) {
+  return Math.abs(value) < 0.005 ? 0 : value;
+}
+
+function sum(
+  rows: MonthlyCashFlowRow[],
+  key: keyof Pick<MonthlyCashFlowRow, "spendingGoal" | "totalNetIncome" | "cmaWithdrawals" | "iraDistributions" | "otherOutflows" | "surplusDeficit">,
+) {
   return rows.reduce((total, row) => total + row[key], 0);
 }
 
