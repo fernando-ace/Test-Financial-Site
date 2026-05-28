@@ -11,16 +11,6 @@ import {
   parseIncomeLadderWorkbookFromArrayBuffer,
 } from "./lib/parseIncomeLadderWorkbook";
 import { formatCurrency, formatSignedCurrency } from "./lib/formatters";
-import {
-  Bar,
-  CartesianGrid,
-  ComposedChart,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 
 interface ReportMetadata {
   clientName: string;
@@ -48,17 +38,6 @@ type AnnualCoverageRow = AnnualCashFlowSummary & {
   yearLabel: string;
   portfolioDistributions: number;
 };
-
-interface AnnualCoverageTooltipProps {
-  active?: boolean;
-  label?: string | number;
-  payload?: Array<{
-    dataKey?: string | number;
-    name?: string | number;
-    value?: number | string;
-    payload?: AnnualCoverageRow;
-  }>;
-}
 
 const INITIAL_STATUS = "No workbook loaded. Upload an Income Ladder workbook to generate a client snapshot.";
 const ANNUAL_DISPLAY_YEAR_LIMIT = 10;
@@ -112,7 +91,7 @@ function App() {
 
         setReport(parsedReport);
         setAdvisorNotes("");
-        setCollapsedLedgerYears(new Set());
+        setCollapsedLedgerYears(new Set(getAnnualDisplayRows(parsedReport.annualSummary).map((row) => row.year)));
         setStatusMessage(`${file.name} loaded locally. Workbook data remains in browser memory only.`);
       } catch (caughtError: unknown) {
         setReport(null);
@@ -257,25 +236,13 @@ function App() {
           {!isLoading && report && insights ? (
             <section className="flex min-w-0 flex-col gap-4">
               <WorkbookSummary metadata={metadata} report={report} reportDateLabel={reportDateLabel} displayPeriod={displayPeriod} displayedMonthCount={monthlyDisplayRows.length} />
-              <DataBoundaryWarning report={report} />
-
-              <MonthlyIncomeLadderTable
-                collapsedYears={collapsedLedgerYears}
-                onCollapseAll={collapseAllLedgerYears}
-                onExpandAll={expandAllLedgerYears}
-                onToggleYear={toggleLedgerYear}
-                rows={monthlyDisplayRows}
-                totalRows={report.rowsParsed}
-              />
+              <DataAuditNotice report={report} displayPeriod={displayPeriod} />
 
               <section className="kpi-grid grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 <KpiCard label="Total Spending Goal" value={displayMetrics.totalSpendingGoal} icon={CalendarDays} caption={displayPeriod} />
                 <KpiCard label="Total Net Income" value={displayMetrics.totalNetIncome} icon={Landmark} caption="Modeled income over period" />
                 <KpiCard label="Net IRA Distributions" value={displayMetrics.totalIraDistributions} icon={FileSpreadsheet} caption="Total modeled net IRA distributions" />
                 <KpiCard label="CMA Withdrawals" value={displayMetrics.totalCmaWithdrawals} icon={Upload} caption="Total modeled CMA withdrawals" />
-                {displayMetrics.totalOtherOutflows !== 0 ? (
-                  <KpiCard label="Workbook Adjustments" value={displayMetrics.totalOtherOutflows} icon={TrendingDown} caption="Workbook-derived reconciliation to surplus / deficit" />
-                ) : null}
                 <KpiCard label="Total Surplus / Deficit" value={displayMetrics.totalSurplusDeficit} icon={TrendingUp} signed caption="Aggregate cash-flow result" />
                 <KpiCard label="First Cash-Flow Shortfall" value={displayMetrics.firstShortfallMonth ?? "None found"} icon={TrendingDown} caption={`${displayMetrics.shortfallMonthCount} monthly cash-flow shortfalls`} />
                 <KpiCard
@@ -299,6 +266,15 @@ function App() {
                 <MaturityTable maturities={previewMaturities} />
                 <InsightPanel insights={insights} />
               </section>
+
+              <MonthlyIncomeLadderTable
+                collapsedYears={collapsedLedgerYears}
+                onCollapseAll={collapseAllLedgerYears}
+                onExpandAll={expandAllLedgerYears}
+                onToggleYear={toggleLedgerYear}
+                rows={monthlyDisplayRows}
+                totalRows={report.rowsParsed}
+              />
 
               <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                 <h2 className="text-lg font-semibold text-slate-950">Advisor notes</h2>
@@ -351,74 +327,119 @@ function WorkbookSummary({
   );
 }
 
-function DataBoundaryWarning({ report }: { report: IncomeLadderReport }) {
-  if (!report.dataBoundary?.firstExcludedMonth) {
+function DataAuditNotice({ displayPeriod, report }: { displayPeriod: string; report: IncomeLadderReport }) {
+  const auditItems = getAuditItems(report, displayPeriod);
+  const detailItems = auditItems.slice(1);
+
+  if (detailItems.length === 0) {
     return (
       <section className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
-        Report period is limited to workbook-backed monthly rows.
+        <p className="font-semibold text-slate-900">Workbook data audit</p>
+        <p className="mt-1">{auditItems[0]} Report period is limited to workbook-backed monthly rows.</p>
       </section>
     );
   }
 
   return (
     <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
-      <p className="font-semibold">
-        Data stops at {report.dataBoundary.lastValidMonth}. Later workbook rows beginning {report.dataBoundary.firstExcludedMonth} were excluded.
-      </p>
-      <p className="mt-1 text-amber-800">{report.dataBoundary.reason} Report period is limited to workbook-backed monthly rows.</p>
+      <p className="font-semibold">Workbook data audit</p>
+      <p className="mt-1 text-amber-800">{auditItems[0]} Report period is limited to workbook-backed monthly rows.</p>
+      <ul className="mt-2 space-y-1 text-amber-900">
+        {detailItems.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
     </section>
   );
 }
 
+function getAuditItems(report: IncomeLadderReport, displayPeriod: string) {
+  const items = [`Modeled report period: ${displayPeriod}.`];
+
+  if (report.skippedLeadingRows?.firstMonth && report.skippedLeadingRows.lastMonth) {
+    items.push(`${report.skippedLeadingRows.firstMonth}-${report.skippedLeadingRows.lastMonth} rows are present but all zero, so they were skipped.`);
+  }
+
+  if (report.dataBoundary?.firstExcludedMonth) {
+    const isExternalLinkBoundary = report.dataBoundary.reason.toLowerCase().includes("external-link");
+    const reason = isExternalLinkBoundary
+      ? "contains external-link formulas"
+      : "contains formula errors, blanks, or invalid workbook-backed values";
+    items.push(`${report.dataBoundary.firstExcludedMonth} onward ${reason}, so those rows were excluded.`);
+  }
+
+  return items;
+}
+
 function AnnualCoverageChart({ annualSummary }: { annualSummary: AnnualCoverageRow[] }) {
+  const maxChartValue = Math.max(
+    ...annualSummary.flatMap((row) => [row.spendingGoal, row.totalNetIncome + row.portfolioDistributions]),
+    1,
+  );
+  const yAxisTicks = [maxChartValue, maxChartValue * 0.75, maxChartValue * 0.5, maxChartValue * 0.25, 0];
+
   return (
     <article className="chart-card min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-slate-950">Annual cash-flow coverage</h2>
         <p className="text-sm text-slate-500">Spending goal compared with modeled income and portfolio funding.</p>
       </div>
-      <div className="h-80">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={annualSummary} margin={{ left: 4, right: 10, top: 8, bottom: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-            <XAxis dataKey="yearLabel" tickLine={false} axisLine={false} tick={{ fill: "#64748b", fontSize: 12 }} />
-            <YAxis tickLine={false} axisLine={false} tick={{ fill: "#64748b", fontSize: 12 }} tickFormatter={(value) => `$${Math.round(Number(value) / 1000)}k`} />
-            <Tooltip content={<AnnualCoverageTooltip />} cursor={{ fill: "#f8fafc" }} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="spendingGoal" name="Spending Goal" fill="#0f766e" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="totalNetIncome" name="Net Income" stackId="funding" fill="#2563eb" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="portfolioDistributions" name="Portfolio Funding" stackId="funding" fill={PORTFOLIO_DISTRIBUTION_COLOR} radius={[4, 4, 0, 0]} />
-          </ComposedChart>
-        </ResponsiveContainer>
+      <div className="annual-coverage-chart" role="img" aria-label="Annual cash-flow coverage by year">
+        <div className="annual-chart-axis" aria-hidden="true">
+          {yAxisTicks.map((tick) => (
+            <span key={tick}>{formatCompactCurrency(tick)}</span>
+          ))}
+        </div>
+        <div className="annual-chart-plot">
+          <div className="annual-chart-grid" aria-hidden="true">
+            {yAxisTicks.map((tick) => (
+              <span key={tick} />
+            ))}
+          </div>
+          <div className="annual-chart-years" style={{ gridTemplateColumns: `repeat(${annualSummary.length}, minmax(0, 1fr))` }}>
+            {annualSummary.map((row) => (
+              <AnnualCoverageYear key={row.yearLabel} row={row} maxChartValue={maxChartValue} />
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="annual-chart-legend" aria-label="Chart legend">
+        <LegendSwatch color="#0f766e" label="Spending Goal" />
+        <LegendSwatch color="#2563eb" label="Net Income" />
+        <LegendSwatch color={PORTFOLIO_DISTRIBUTION_COLOR} label="Portfolio Funding" />
       </div>
     </article>
   );
 }
 
-function AnnualCoverageTooltip({ active, label, payload }: AnnualCoverageTooltipProps) {
-  if (!active || !payload?.length) {
-    return null;
-  }
-
-  const row = payload.find((item) => item.payload)?.payload;
-
-  if (!row) {
-    return null;
-  }
+function AnnualCoverageYear({ maxChartValue, row }: { maxChartValue: number; row: AnnualCoverageRow }) {
+  const spendingHeight = getChartHeightPercent(row.spendingGoal, maxChartValue);
+  const incomeHeight = getChartHeightPercent(row.totalNetIncome, maxChartValue);
+  const portfolioHeight = getChartHeightPercent(row.portfolioDistributions, maxChartValue);
+  const fundingHeight = Math.min(incomeHeight + portfolioHeight, 100);
+  const incomeSegmentHeight = fundingHeight > 0 ? Math.max((incomeHeight / fundingHeight) * 100, 3) : 0;
+  const portfolioSegmentHeight = fundingHeight > 0 ? Math.max(100 - incomeSegmentHeight, row.portfolioDistributions > 0 ? 3 : 0) : 0;
 
   return (
-    <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-lg">
-      <p className="font-semibold text-slate-950">{label}</p>
-      <div className="mt-2 space-y-1 text-slate-600">
-        <TooltipLine label="Spending Goal" value={row.spendingGoal} />
-        <TooltipLine label="Net Income" value={row.totalNetIncome} />
-        {row.otherOutflows !== 0 ? <TooltipLine label="Workbook Adjustment" value={row.otherOutflows} /> : null}
-        <TooltipLine label="Portfolio Funding" value={row.portfolioDistributions} emphasized />
-        <div className="space-y-0.5 border-l-2 border-slate-200 pl-3 text-xs">
-          <TooltipLine label="Net IRA" value={row.iraDistributions} />
-          <TooltipLine label="CMA" value={row.cmaWithdrawals} />
+    <div className="annual-chart-year" tabIndex={0}>
+      <div className="annual-chart-bars" aria-label={`${row.yearLabel}: spending ${formatCurrency(row.spendingGoal)}, net income ${formatCurrency(row.totalNetIncome)}, portfolio funding ${formatCurrency(row.portfolioDistributions)}`}>
+        <span className="annual-chart-bar annual-chart-bar-spending" style={{ height: `${spendingHeight}%` }} />
+        <span className="annual-chart-bar annual-chart-bar-funding" style={{ height: `${fundingHeight}%` }}>
+          <span className="annual-chart-segment annual-chart-segment-portfolio" style={{ height: `${portfolioSegmentHeight}%` }} />
+          <span className="annual-chart-segment annual-chart-segment-income" style={{ height: `${incomeSegmentHeight}%` }} />
+        </span>
+        <div className="annual-chart-tooltip">
+          <p>{row.yearLabel}</p>
+          <TooltipLine label="Spending Goal" value={row.spendingGoal} />
+          <TooltipLine label="Net Income" value={row.totalNetIncome} />
+          <TooltipLine label="Portfolio Funding" value={row.portfolioDistributions} emphasized />
+          <div className="space-y-0.5 border-l-2 border-slate-200 pl-3 text-xs">
+            <TooltipLine label="Net IRA" value={row.iraDistributions} />
+            <TooltipLine label="CMA" value={row.cmaWithdrawals} />
+          </div>
         </div>
       </div>
+      <span className="annual-chart-year-label">{row.yearLabel}</span>
     </div>
   );
 }
@@ -432,11 +453,20 @@ function TooltipLine({ emphasized = false, label, value }: { emphasized?: boolea
   );
 }
 
+function LegendSwatch({ color, label }: { color: string; label: string }) {
+  return (
+    <span>
+      <i style={{ backgroundColor: color }} />
+      {label}
+    </span>
+  );
+}
+
 function AnnualSurplusPanel({ annualSummary }: { annualSummary: AnnualCashFlowSummary[] }) {
   const maxAbsValue = Math.max(...annualSummary.map((row) => Math.abs(row.surplusDeficit)), 1);
 
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <article className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-lg font-semibold text-slate-950">Cash-flow health</h2>
       <p className="mt-1 text-sm text-slate-500">Annual surplus or deficit by year.</p>
       <div className="mt-4 space-y-3">
@@ -463,7 +493,7 @@ function AnnualSurplusPanel({ annualSummary }: { annualSummary: AnnualCashFlowSu
 
 function MaturityTable({ maturities }: { maturities: MaturityEvent[] }) {
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <article className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-lg font-semibold text-slate-950">Upcoming maturities</h2>
       <p className="mt-1 text-sm text-slate-500">Showing the next meaningful maturity events from the workbook.</p>
       {maturities.length === 0 ? (
@@ -518,22 +548,21 @@ function MonthlyIncomeLadderTable({
   }
 
   const visibleAccounts = getVisibleAccountGroups(rows);
-  const hasOtherOutflows = rows.some((row) => row.otherOutflows !== 0);
-  const columnCount = getMonthlyLedgerColumnCount(visibleAccounts, hasOtherOutflows);
+  const columnCount = getMonthlyLedgerColumnCount(visibleAccounts);
   const isLimited = totalRows > rows.length;
   const balanceWarning = getAccountBalanceWarning(rows);
   const visibleYears = Array.from(new Set(rows.map((row) => row.year)));
   const allYearsCollapsed = visibleYears.every((year) => collapsedYears.has(year));
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-teal-700">Primary monthly view</p>
           <h2 className="mt-1 text-xl font-semibold text-slate-950">Monthly Income Ladder</h2>
           <p className="mt-1 text-sm text-slate-500">
             A polished spreadsheet-style view of where monthly cash flow is expected to come from.
-            {isLimited ? ` Showing the first ${ANNUAL_DISPLAY_YEAR_LIMIT} years (${rows.length} of ${totalRows} valid months).` : ` Showing ${rows.length} valid workbook-backed months.`}
+            {isLimited ? ` Secondary detail view: showing the first ${ANNUAL_DISPLAY_YEAR_LIMIT} years (${rows.length} of ${totalRows} valid months).` : ` Secondary detail view: showing ${rows.length} valid workbook-backed months.`}
           </p>
           {balanceWarning ? (
             <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
@@ -556,7 +585,17 @@ function MonthlyIncomeLadderTable({
           <p className="text-sm font-semibold text-slate-600">{visibleYears.length} years shown</p>
         </div>
       </div>
-      <div className="overflow-x-auto">
+      {allYearsCollapsed ? (
+        <div className="collapsed-year-grid">
+          {visibleYears.map((year) => (
+            <button key={year} type="button" onClick={() => onToggleYear(year)} className="collapsed-year-button">
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              <span>{year}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <div className={`max-w-full overflow-x-auto ${allYearsCollapsed ? "hidden" : ""}`}>
         <table className="monthly-ledger-table w-full min-w-[760px] border-collapse text-xs md:min-w-0">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-100 text-xs uppercase tracking-wide text-slate-600">
@@ -569,11 +608,6 @@ function MonthlyIncomeLadderTable({
               <th rowSpan={2} className="top-0 bg-slate-100 px-3 py-3 text-right">
                 Income
               </th>
-              {hasOtherOutflows ? (
-                <th rowSpan={2} className="top-0 bg-slate-100 px-3 py-3 text-right">
-                  Workbook Adj.
-                </th>
-              ) : null}
               {visibleAccounts.client1Ira ? (
                 <th colSpan={3} className="top-0 border-l border-slate-200 bg-slate-100 px-3 py-2 text-center">
                   Client 1 IRA
@@ -629,9 +663,9 @@ function MonthlyIncomeLadderTable({
               return (
                 <Fragment key={row.month}>
                   {isFirstYearRow ? (
-                    <tr className="bg-slate-800 text-xs font-semibold uppercase tracking-wide text-white">
-                      <td colSpan={columnCount} className="sticky left-0 z-10 px-3 py-2">
-                        <button type="button" onClick={() => onToggleYear(row.year)} className="inline-flex items-center gap-2 text-left font-semibold text-white">
+                    <tr className="border-y border-slate-200 bg-slate-100 text-xs font-semibold uppercase tracking-wide text-slate-700">
+                      <td colSpan={columnCount} className="sticky left-0 z-10 bg-slate-100 px-3 py-2">
+                        <button type="button" onClick={() => onToggleYear(row.year)} className="inline-flex items-center gap-2 text-left font-semibold text-slate-700">
                           {isCollapsed ? <ChevronRight className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
                           <span>{row.year}</span>
                         </button>
@@ -643,7 +677,6 @@ function MonthlyIncomeLadderTable({
                       <td className={`sticky left-0 z-10 px-3 py-2.5 font-semibold ${isShortfall ? "bg-rose-50 text-rose-950" : "bg-inherit text-slate-950"}`}>{row.label}</td>
                       <LedgerCurrencyCell value={row.spendingGoal} />
                       <LedgerCurrencyCell value={row.totalNetIncome} />
-                      {hasOtherOutflows ? <LedgerCurrencyCell value={row.otherOutflows} optional /> : null}
                       {visibleAccounts.client1Ira ? (
                         <>
                           <LedgerCurrencyCell value={row.client1Ira.maturingAmount} separated optional />
@@ -732,8 +765,12 @@ function hasAccountDetail(detail: MonthlyCashFlowRow["client1Ira"]) {
   return [detail.maturingAmount, detail.cashBalance, detail.netDistribution, detail.withdrawal].some((value) => typeof value === "number" && Number.isFinite(value) && value !== 0);
 }
 
-function getMonthlyLedgerColumnCount(visibleAccounts: VisibleAccountGroups, hasOtherOutflows = false) {
-  return 5 + (hasOtherOutflows ? 1 : 0) + (visibleAccounts.client1Ira ? 3 : 0) + (visibleAccounts.client2Ira ? 3 : 0) + (visibleAccounts.cma ? 3 : 0);
+function getMonthlyLedgerColumnCount(visibleAccounts: VisibleAccountGroups) {
+  return 5 + (visibleAccounts.client1Ira ? 3 : 0) + (visibleAccounts.client2Ira ? 3 : 0) + (visibleAccounts.cma ? 3 : 0);
+}
+
+function getPrintLedgerColumnCount(visibleAccounts: VisibleAccountGroups) {
+  return 5 + (visibleAccounts.client1Ira ? 2 : 0) + (visibleAccounts.client2Ira ? 2 : 0) + (visibleAccounts.cma ? 2 : 0);
 }
 
 function getAccountBalanceWarning(rows: MonthlyCashFlowRow[]) {
@@ -789,109 +826,106 @@ function CompactPrintReport({
   reportDateLabel: string;
 }) {
   const notes = advisorNotes.trim();
-  const hasOtherOutflows = monthlyRows.some((row) => row.otherOutflows !== 0);
   const balanceWarning = getAccountBalanceWarning(monthlyRows);
 
   return (
     <section className="print-only compact-print-report">
-      <header className="compact-print-header print-block">
-        <p>Wells Fargo Advisors</p>
-        <h1>Income Ladder Snapshot</h1>
-        <dl>
-          <div>
-            <dt>Client</dt>
-            <dd>{metadata.clientName || "Not specified"}</dd>
-          </div>
-          <div>
-            <dt>Prepared by</dt>
-            <dd>{metadata.preparedBy || "Not specified"}</dd>
-          </div>
-          <div>
-            <dt>Date</dt>
-            <dd>{reportDateLabel}</dd>
-          </div>
-          <div>
-            <dt>Workbook</dt>
-            <dd>{cleanWorkbookName(report.workbookName)}</dd>
-          </div>
-          <div>
-            <dt>Period</dt>
-            <dd>{displayPeriod}</dd>
-          </div>
-          <div>
-            <dt>Displayed months</dt>
-            <dd>{monthlyRows.length}</dd>
-          </div>
-        </dl>
-      </header>
-
-      {report.dataBoundary?.firstExcludedMonth ? (
-        <section className="compact-print-warning print-block">
-          Data stops at {report.dataBoundary.lastValidMonth}. Later workbook rows beginning {report.dataBoundary.firstExcludedMonth} were excluded. {report.dataBoundary.reason}
-        </section>
-      ) : null}
-
-      <section className="compact-print-grid print-block">
-        <CompactPrintKpi label="Total Spending Goal" value={formatCurrency(displayMetrics.totalSpendingGoal)} />
-        <CompactPrintKpi label="Total Net Income" value={formatCurrency(displayMetrics.totalNetIncome)} />
-        <CompactPrintKpi label="Net IRA Distributions" value={formatCurrency(displayMetrics.totalIraDistributions)} />
-        <CompactPrintKpi label="CMA Withdrawals" value={formatCurrency(displayMetrics.totalCmaWithdrawals)} />
-        {hasOtherOutflows ? <CompactPrintKpi label="Workbook Adjustments" value={formatCurrency(displayMetrics.totalOtherOutflows)} /> : null}
-        <CompactPrintKpi label="Total Surplus / Deficit" value={formatSignedCurrency(displayMetrics.totalSurplusDeficit)} />
-      </section>
-
-      <section className="compact-print-two-column print-block">
-        <article className="compact-print-card compact-print-chart-card print-block">
-          <h2>Annual cash-flow coverage</h2>
-          <CompactPrintCoverageChart data={annualRows} />
-        </article>
-
-        <article className="compact-print-card print-block">
-          <h2>Snapshot insights</h2>
-          <dl className="compact-print-insights">
+      <div className="compact-print-footer">
+        Income Ladder Snapshot - {displayPeriod}
+      </div>
+      <section className="compact-print-summary-page">
+        <header className="compact-print-header print-block">
+          <p>Wells Fargo Advisors</p>
+          <h1>Income Ladder Snapshot</h1>
+          <dl>
             <div>
-              <dt>First shortfall month</dt>
-              <dd>{insights.firstShortfallMonth}</dd>
+              <dt>Client</dt>
+              <dd>{metadata.clientName || "Not specified"}</dd>
             </div>
             <div>
-              <dt>Shortfall month count</dt>
-              <dd>{insights.shortfallMonthCount}</dd>
+              <dt>Prepared by</dt>
+              <dd>{metadata.preparedBy || "Not specified"}</dd>
             </div>
             <div>
-              <dt>Total modeled period</dt>
-              <dd>{insights.reportPeriod}</dd>
+              <dt>Date</dt>
+              <dd>{reportDateLabel}</dd>
             </div>
             <div>
-              <dt>Largest annual shortfall</dt>
-              <dd>{insights.largestAnnualShortfall}</dd>
+              <dt>Workbook</dt>
+              <dd>{cleanWorkbookName(report.workbookName)}</dd>
             </div>
             <div>
-              <dt>First negative account balance</dt>
-              <dd>{insights.firstNegativeAccountBalanceMonth}</dd>
+              <dt>Period</dt>
+              <dd>{displayPeriod}</dd>
             </div>
-            {balanceWarning ? (
-              <div>
-                <dt>Account balance warning</dt>
-                <dd>
-                  {balanceWarning.first.account} turns negative in {balanceWarning.first.label}; lowest displayed balance is {balanceWarning.largest.account}{" "}
-                  {formatCurrency(balanceWarning.largest.value)} in {balanceWarning.largest.label}.
-                </dd>
-              </div>
-            ) : null}
+            <div>
+              <dt>Months</dt>
+              <dd>{monthlyRows.length}</dd>
+            </div>
           </dl>
-        </article>
-      </section>
+        </header>
 
-      <section className="compact-print-two-column compact-print-bottom-row">
-        <article className="compact-print-card print-block">
-          <h2>Annual summary</h2>
-          <AnnualSummaryTable rows={annualRows} compact />
-        </article>
+        <section className="compact-print-grid print-block">
+          <CompactPrintKpi label="Total Spending Goal" value={formatCurrency(displayMetrics.totalSpendingGoal)} />
+          <CompactPrintKpi label="Total Net Income" value={formatCurrency(displayMetrics.totalNetIncome)} />
+          <CompactPrintKpi label="Net IRA Distributions" value={formatCurrency(displayMetrics.totalIraDistributions)} />
+          <CompactPrintKpi label="CMA Withdrawals" value={formatCurrency(displayMetrics.totalCmaWithdrawals)} />
+          <CompactPrintKpi label="Total Surplus / Deficit" value={formatSignedCurrency(displayMetrics.totalSurplusDeficit)} />
+        </section>
 
-        <article className="compact-print-card print-block">
-          <h2>Upcoming maturities</h2>
-          <CompactMaturityList maturities={maturities} />
-        </article>
+        <section className="compact-print-two-column print-block">
+          <article className="compact-print-card compact-print-chart-card print-block">
+            <h2>Annual cash-flow coverage</h2>
+            <CompactPrintCoverageChart data={annualRows} />
+          </article>
+
+          <article className="compact-print-card print-block">
+            <h2>Snapshot insights</h2>
+            <dl className="compact-print-insights">
+              <div>
+                <dt>First shortfall month</dt>
+                <dd>{insights.firstShortfallMonth}</dd>
+              </div>
+              <div>
+                <dt>Shortfall month count</dt>
+                <dd>{insights.shortfallMonthCount}</dd>
+              </div>
+              <div>
+                <dt>Total modeled period</dt>
+                <dd>{insights.reportPeriod}</dd>
+              </div>
+              <div>
+                <dt>Largest annual shortfall</dt>
+                <dd>{insights.largestAnnualShortfall}</dd>
+              </div>
+              <div>
+                <dt>First negative account balance</dt>
+                <dd>{insights.firstNegativeAccountBalanceMonth}</dd>
+              </div>
+              {balanceWarning ? (
+                <div>
+                  <dt>Account balance warning</dt>
+                  <dd>
+                    {balanceWarning.first.account} turns negative in {balanceWarning.first.label}; lowest displayed balance is {balanceWarning.largest.account}{" "}
+                    {formatCurrency(balanceWarning.largest.value)} in {balanceWarning.largest.label}.
+                  </dd>
+                </div>
+              ) : null}
+            </dl>
+          </article>
+        </section>
+
+        <section className="compact-print-page-one-support print-block">
+          <article className="compact-print-card">
+            <h2>Annual summary</h2>
+            <AnnualSummaryTable rows={annualRows} compact />
+          </article>
+
+          <article className="compact-print-card">
+            <h2>Upcoming maturities</h2>
+            <CompactMaturityList maturities={maturities} />
+          </article>
+        </section>
       </section>
 
       <section className="compact-print-ledger-flow">
@@ -903,6 +937,10 @@ function CompactPrintReport({
         ) : null}
 
         <article className="compact-print-card compact-print-ledger-section">
+          <div className="compact-print-ledger-context">
+            <p>Income Ladder Snapshot - Monthly detail</p>
+            <span>{displayPeriod}</span>
+          </div>
           <h2>Monthly Income Ladder</h2>
           {balanceWarning ? (
             <p className="compact-print-warning">
@@ -918,8 +956,6 @@ function CompactPrintReport({
 }
 
 function AnnualSummaryTable({ rows, compact = false }: { rows: AnnualCashFlowSummary[]; compact?: boolean }) {
-  const hasOtherOutflows = rows.some((row) => row.otherOutflows !== 0);
-
   return (
     <table className={compact ? "compact-print-table" : "w-full border-collapse text-sm"}>
       <thead>
@@ -929,7 +965,6 @@ function AnnualSummaryTable({ rows, compact = false }: { rows: AnnualCashFlowSum
           <th className="numeric">Net Income</th>
           <th className="numeric">Net IRA Distributions</th>
           <th className="numeric">CMA Withdrawals</th>
-          {hasOtherOutflows ? <th className="numeric">Workbook Adjustments</th> : null}
           <th className="numeric">Surplus / Deficit</th>
         </tr>
       </thead>
@@ -941,7 +976,6 @@ function AnnualSummaryTable({ rows, compact = false }: { rows: AnnualCashFlowSum
             <td className="numeric">{formatCurrency(row.totalNetIncome)}</td>
             <td className="numeric">{formatCurrency(row.iraDistributions)}</td>
             <td className="numeric">{formatCurrency(row.cmaWithdrawals)}</td>
-            {hasOtherOutflows ? <td className="numeric">{formatCurrency(row.otherOutflows)}</td> : null}
             <td className="numeric">{formatSignedCurrency(row.surplusDeficit)}</td>
           </tr>
         ))}
@@ -952,40 +986,60 @@ function AnnualSummaryTable({ rows, compact = false }: { rows: AnnualCashFlowSum
 
 function PrintMonthlyLedger({ rows }: { rows: MonthlyCashFlowRow[] }) {
   const visibleAccounts = getVisibleAccountGroups(rows);
-  const hasOtherOutflows = rows.some((row) => row.otherOutflows !== 0);
-  const columnCount = getMonthlyLedgerColumnCount(visibleAccounts, hasOtherOutflows);
+  const columnCount = getPrintLedgerColumnCount(visibleAccounts);
 
   return (
     <table className="compact-print-table compact-print-ledger-table">
+      <colgroup>
+        <col className="compact-print-month-col" />
+        <col className="compact-print-money-col" />
+        <col className="compact-print-money-col" />
+        {visibleAccounts.client1Ira ? (
+          <>
+            <col className="compact-print-money-col" />
+            <col className="compact-print-money-col" />
+          </>
+        ) : null}
+        {visibleAccounts.client2Ira ? (
+          <>
+            <col className="compact-print-money-col" />
+            <col className="compact-print-money-col" />
+          </>
+        ) : null}
+        {visibleAccounts.cma ? (
+          <>
+            <col className="compact-print-money-col" />
+            <col className="compact-print-money-col" />
+          </>
+        ) : null}
+        <col className="compact-print-money-col" />
+        <col className="compact-print-money-col" />
+      </colgroup>
       <thead>
         <tr>
           <th>Month</th>
           <th className="numeric">Goal</th>
-          <th className="numeric">Net Income</th>
-          {hasOtherOutflows ? <th className="numeric">Workbook Adj.</th> : null}
+          <th className="numeric">Net Inc.</th>
           {visibleAccounts.client1Ira ? (
             <>
-              <th className="numeric">C1 Mat.</th>
               <th className="numeric">C1 Cash</th>
               <th className="numeric">C1 Dist.</th>
             </>
           ) : null}
           {visibleAccounts.client2Ira ? (
             <>
-              <th className="numeric">C2 Mat.</th>
               <th className="numeric">C2 Cash</th>
               <th className="numeric">C2 Dist.</th>
             </>
           ) : null}
           {visibleAccounts.cma ? (
             <>
-              <th className="numeric">CMA Mat.</th>
               <th className="numeric">CMA Cash</th>
               <th className="numeric">CMA W/D</th>
             </>
           ) : null}
-          <th className="numeric">Portfolio Funding</th>
-          <th className="numeric">Surplus / Deficit</th>
+          <th className="numeric">Funding</th>
+          <th className="numeric">Surplus</th>
         </tr>
       </thead>
       <tbody>
@@ -1004,24 +1058,20 @@ function PrintMonthlyLedger({ rows }: { rows: MonthlyCashFlowRow[] }) {
                 <td>{row.label}</td>
                 <td className="numeric">{formatCurrency(row.spendingGoal)}</td>
                 <td className="numeric">{formatCurrency(row.totalNetIncome)}</td>
-                {hasOtherOutflows ? <td className="numeric">{formatLedgerOptionalCurrency(row.otherOutflows)}</td> : null}
                 {visibleAccounts.client1Ira ? (
                   <>
-                    <td className="numeric">{formatLedgerOptionalCurrency(row.client1Ira.maturingAmount)}</td>
                     <td className={`numeric ${isNegativeBalance(row.client1Ira.cashBalance) ? "compact-print-negative-cell" : ""}`}>{formatLedgerOptionalCurrency(row.client1Ira.cashBalance)}</td>
                     <td className="numeric">{formatLedgerOptionalCurrency(row.client1Ira.netDistribution)}</td>
                   </>
                 ) : null}
                 {visibleAccounts.client2Ira ? (
                   <>
-                    <td className="numeric">{formatLedgerOptionalCurrency(row.client2Ira.maturingAmount)}</td>
                     <td className={`numeric ${isNegativeBalance(row.client2Ira.cashBalance) ? "compact-print-negative-cell" : ""}`}>{formatLedgerOptionalCurrency(row.client2Ira.cashBalance)}</td>
                     <td className="numeric">{formatLedgerOptionalCurrency(row.client2Ira.netDistribution)}</td>
                   </>
                 ) : null}
                 {visibleAccounts.cma ? (
                   <>
-                    <td className="numeric">{formatLedgerOptionalCurrency(row.cma.maturingAmount)}</td>
                     <td className={`numeric ${isNegativeBalance(row.cma.cashBalance) ? "compact-print-negative-cell" : ""}`}>{formatLedgerOptionalCurrency(row.cma.cashBalance)}</td>
                     <td className="numeric">{formatLedgerOptionalCurrency(row.cma.withdrawal)}</td>
                   </>
@@ -1080,7 +1130,7 @@ function CompactPrintCoverageChart({ data }: { data: AnnualCoverageRow[] }) {
 
   const rowHeight = 26;
   const chartWidth = 560;
-  const yearLabelWidth = 54;
+  const yearLabelWidth = 74;
   const valueLabelWidth = 84;
   const valueLabelGap = 14;
   const drawableBarWidth = chartWidth - yearLabelWidth - valueLabelWidth - valueLabelGap;
@@ -1349,6 +1399,18 @@ function getDisplayMetrics(annualRows: AnnualCashFlowSummary[], monthlyRows: Mon
 
 function sumAnnualRows(rows: AnnualCashFlowSummary[], key: keyof Omit<AnnualCashFlowSummary, "year">) {
   return rows.reduce((total, row) => total + row[key], 0);
+}
+
+function getChartHeightPercent(value: number, maxValue: number) {
+  if (value <= 0 || maxValue <= 0) {
+    return 0;
+  }
+
+  return Math.max((value / maxValue) * 100, 2);
+}
+
+function formatCompactCurrency(value: number) {
+  return `$${Math.round(value / 1000)}k`;
 }
 
 function formatDisplayPeriod(report: IncomeLadderReport, annualRows: AnnualCashFlowSummary[]) {

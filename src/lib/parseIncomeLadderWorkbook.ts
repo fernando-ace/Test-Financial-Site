@@ -47,7 +47,13 @@ export interface IncomeLadderReport {
   sheetName: string;
   rowsParsed: number;
   sourceMonthlyRowCount: number;
+  skippedLeadingMonthlyRowCount: number;
   excludedMonthlyRowCount: number;
+  skippedLeadingRows?: {
+    firstMonth?: string;
+    lastMonth?: string;
+    reason: string;
+  };
   dataBoundary?: {
     lastValidMonth?: string;
     firstExcludedMonth?: string;
@@ -132,7 +138,9 @@ export function parseIncomeLadderWorkbookFromArrayBuffer(buffer: ArrayBuffer, wo
     sheetName,
     rowsParsed: monthlyRows.length,
     sourceMonthlyRowCount: monthlyExtraction.sourceMonthlyRowCount,
+    skippedLeadingMonthlyRowCount: monthlyExtraction.skippedLeadingMonthlyRowCount,
     excludedMonthlyRowCount: monthlyExtraction.excludedMonthlyRowCount,
+    skippedLeadingRows: monthlyExtraction.skippedLeadingRows,
     dataBoundary: monthlyExtraction.dataBoundary,
     monthlyRows,
     annualSummary,
@@ -145,14 +153,18 @@ export function parseIncomeLadderWorkbookFromArrayBuffer(buffer: ArrayBuffer, wo
 interface MonthlyRowsExtraction {
   rows: MonthlyCashFlowRow[];
   sourceMonthlyRowCount: number;
+  skippedLeadingMonthlyRowCount: number;
   excludedMonthlyRowCount: number;
+  skippedLeadingRows?: IncomeLadderReport["skippedLeadingRows"];
   dataBoundary?: IncomeLadderReport["dataBoundary"];
 }
 
 function extractMonthlyRows(sheet: XLSX.WorkSheet, lastRow: number): MonthlyRowsExtraction {
   const rows: MonthlyCashFlowRow[] = [];
   let sourceMonthlyRowCount = 0;
+  let skippedLeadingMonthlyRowCount = 0;
   let excludedMonthlyRowCount = 0;
+  let skippedLeadingRows: IncomeLadderReport["skippedLeadingRows"];
   let dataBoundary: IncomeLadderReport["dataBoundary"];
 
   for (let rowIndex = 9; rowIndex <= lastRow; rowIndex += 1) {
@@ -221,6 +233,12 @@ function extractMonthlyRows(sheet: XLSX.WorkSheet, lastRow: number): MonthlyRows
         break;
       }
 
+      skippedLeadingMonthlyRowCount += 1;
+      skippedLeadingRows = {
+        firstMonth: skippedLeadingRows?.firstMonth ?? monthInfo.label,
+        lastMonth: monthInfo.label,
+        reason: "Leading workbook rows contain zero or blank financial values and were skipped.",
+      };
       continue;
     }
 
@@ -243,7 +261,9 @@ function extractMonthlyRows(sheet: XLSX.WorkSheet, lastRow: number): MonthlyRows
   return {
     rows,
     sourceMonthlyRowCount,
+    skippedLeadingMonthlyRowCount,
     excludedMonthlyRowCount,
+    skippedLeadingRows,
     dataBoundary,
   };
 }
