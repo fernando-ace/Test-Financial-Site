@@ -500,6 +500,7 @@ function MonthlyIncomeLadderTable({
   const hasOtherOutflows = rows.some((row) => row.otherOutflows !== 0);
   const columnCount = getMonthlyLedgerColumnCount(visibleAccounts, hasOtherOutflows);
   const isLimited = totalRows > rows.length;
+  const balanceWarning = getAccountBalanceWarning(rows);
   const visibleYears = Array.from(new Set(rows.map((row) => row.year)));
   const allYearsCollapsed = visibleYears.every((year) => collapsedYears.has(year));
 
@@ -513,6 +514,15 @@ function MonthlyIncomeLadderTable({
             A polished spreadsheet-style view of where monthly cash flow is expected to come from.
             {isLimited ? ` Showing the first ${ANNUAL_DISPLAY_YEAR_LIMIT} years (${rows.length} of ${totalRows} parsed months).` : ` Showing ${rows.length} parsed months.`}
           </p>
+          {balanceWarning ? (
+            <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
+              Warning: Account cash turns negative in {balanceWarning.first.label}. Review funding source assumptions.
+              <span className="block pt-1 text-xs font-medium text-amber-800">
+                First account: {balanceWarning.first.account} {formatCurrency(balanceWarning.first.value)}. Lowest displayed balance: {balanceWarning.largest.account}{" "}
+                {formatCurrency(balanceWarning.largest.value)} in {balanceWarning.largest.label}.
+              </span>
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -693,7 +703,7 @@ function getVisibleAccountGroups(rows: MonthlyCashFlowRow[]): VisibleAccountGrou
   return {
     client1Ira: rows.some((row) => hasAccountDetail(row.client1Ira)),
     client2Ira: rows.some((row) => hasAccountDetail(row.client2Ira)),
-    cma: rows.some((row) => hasAccountDetail(row.cma)),
+    cma: rows.length > 0,
   };
 }
 
@@ -703,6 +713,18 @@ function hasAccountDetail(detail: MonthlyCashFlowRow["client1Ira"]) {
 
 function getMonthlyLedgerColumnCount(visibleAccounts: VisibleAccountGroups, hasOtherOutflows = false) {
   return 5 + (hasOtherOutflows ? 1 : 0) + (visibleAccounts.client1Ira ? 3 : 0) + (visibleAccounts.client2Ira ? 3 : 0) + (visibleAccounts.cma ? 3 : 0);
+}
+
+function getAccountBalanceWarning(rows: MonthlyCashFlowRow[]) {
+  const negativeBalances = getNegativeAccountBalances(rows);
+  const first = negativeBalances[0];
+
+  if (!first) {
+    return null;
+  }
+
+  const largest = negativeBalances.reduce((largestNegative, balance) => (balance.value < largestNegative.value ? balance : largestNegative), first);
+  return { first, largest };
 }
 
 function InsightPanel({ insights }: { insights: ReturnType<typeof getInsights> }) {
@@ -747,6 +769,7 @@ function CompactPrintReport({
 }) {
   const notes = advisorNotes.trim();
   const hasOtherOutflows = monthlyRows.some((row) => row.otherOutflows !== 0);
+  const balanceWarning = getAccountBalanceWarning(monthlyRows);
 
   return (
     <section className="print-only compact-print-report">
@@ -819,6 +842,15 @@ function CompactPrintReport({
               <dt>First negative account balance</dt>
               <dd>{insights.firstNegativeAccountBalanceMonth}</dd>
             </div>
+            {balanceWarning ? (
+              <div>
+                <dt>Account balance warning</dt>
+                <dd>
+                  {balanceWarning.first.account} turns negative in {balanceWarning.first.label}; lowest displayed balance is {balanceWarning.largest.account}{" "}
+                  {formatCurrency(balanceWarning.largest.value)} in {balanceWarning.largest.label}.
+                </dd>
+              </div>
+            ) : null}
           </dl>
         </article>
       </section>
@@ -845,6 +877,12 @@ function CompactPrintReport({
 
         <article className="compact-print-card compact-print-ledger-section">
           <h2>Monthly Income Ladder</h2>
+          {balanceWarning ? (
+            <p className="compact-print-warning">
+              Warning: Account cash turns negative in {balanceWarning.first.label}. Review funding source assumptions. First account: {balanceWarning.first.account}{" "}
+              {formatCurrency(balanceWarning.first.value)}.
+            </p>
+          ) : null}
           <PrintMonthlyLedger rows={monthlyRows} />
         </article>
       </section>

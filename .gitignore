@@ -9,8 +9,15 @@ vite.config.d.ts
 *.xlsm
 *.csv
 *.pdf
+*.png
+*.jpg
+*.jpeg
+*.webp
 *.numbers
 *.ods
+outputs/
+screenshots/
+qa-artifacts/
 .DS_Store
 .env
 .env.*

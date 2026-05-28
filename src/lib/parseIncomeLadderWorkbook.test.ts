@@ -97,6 +97,10 @@ describe("parseIncomeLadderWorkbookFromArrayBuffer", () => {
     expect(appSource).toContain("Net IRA Distributions");
     expect(appSource).toContain("C1 Dist.");
     expect(appSource).toContain("C2 Dist.");
+    expect(appSource).toContain("CMA Mat.");
+    expect(appSource).toContain("CMA Cash");
+    expect(appSource).toContain("CMA W/D");
+    expect(appSource).toContain("Account balance warning");
     expect(appSource).not.toContain("C1 Net IRA");
     expect(appSource).not.toContain("C2 Net IRA");
   });
@@ -111,6 +115,9 @@ describe("parseIncomeLadderWorkbookFromArrayBuffer", () => {
     expect(report.metrics.firstNegativeAccountBalanceMonth).toBe("Feb 2028");
     expect(report.metrics.accountsWithNegativeBalances).toEqual(["Client 1 IRA", "Client 2 IRA"]);
     expect(report.metrics.largestNegativeAccountBalance).toEqual(expect.objectContaining({ account: "Client 2 IRA", value: -75 }));
+    const appSource = readFileSync("src/App.tsx", "utf8");
+    expect(appSource).toContain("Warning: Account cash turns negative in");
+    expect(appSource).toContain("Lowest displayed balance");
   });
 
   it("omits all-zero CMA account detail while preserving nonzero CMA withdrawals", () => {
@@ -118,10 +125,20 @@ describe("parseIncomeLadderWorkbookFromArrayBuffer", () => {
     expect(report.annualSummary[0].cmaWithdrawals).toBe(50);
   });
 
+  it("uses displayed-month labels instead of mislabeled source row counts in web and print output", () => {
+    const appSource = readFileSync("src/App.tsx", "utf8");
+    expect(appSource).toContain("Displayed months");
+    expect(appSource).not.toContain("Cash-flow rows");
+  });
+
   it("does not track real workbook or generated PDF artifacts", () => {
     const trackedFiles = execSync("git ls-files", { encoding: "utf8" }).split(/\r?\n/).filter(Boolean);
+    const gitignore = readFileSync(".gitignore", "utf8");
     expect(trackedFiles).not.toContain("Sample Income Ladder (1).xlsx");
     expect(trackedFiles).not.toContain("Income Ladder Snapshot test 7.pdf");
-    expect(trackedFiles.some((file) => /\.(xlsx|xlsm|xls|pdf)$/i.test(file))).toBe(false);
+    expect(trackedFiles.some((file) => /\.(xlsx|xlsm|xls|pdf|png|jpe?g|webp)$/i.test(file))).toBe(false);
+    ["*.xlsx", "*.xls", "*.xlsm", "*.pdf", "*.png", "*.jpg", "*.jpeg", "*.webp", "outputs/", "screenshots/", "qa-artifacts/"].forEach((pattern) => {
+      expect(gitignore).toContain(pattern);
+    });
   });
 });
